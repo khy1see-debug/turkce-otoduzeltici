@@ -15,6 +15,7 @@ from src.speller import correct_word
 from src.deasciifier import deasciify_word
 from src.harmony import fix_question_particle, get_genitive_suffix
 from src.slang import expand_slang
+from src.syntax import fix_word_order
 
 QUESTION_PARTICLES = {"mi", "mı", "mu", "mü", "misin", "mısın", "musun", "müsün", "miyiz", "mıyız"}
 CONJUNCTION_PARTICLES = {"de", "da"}
@@ -102,6 +103,9 @@ def fix_sentence(raw_text: str) -> str:
         if w in {"mi", "mı", "mu", "mü"}:
             prev = processed_words[i - 1]
             processed_words[i] = fix_question_particle(prev, w)
+
+    # Devrik Cümle Düzeltmesi (Yüklemi/Fiili sona taşıma):
+    processed_words = fix_word_order(processed_words)
 
     # Cümle başı büyük harf (Türkçe İ / I kuralı)
     first_word = processed_words[0]
