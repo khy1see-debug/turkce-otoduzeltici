@@ -1,10 +1,10 @@
 """
 Bitişik yazılmış Türkçe metinleri ayırma modülü (Word Segmentation / Viterbi).
-Örnek: "sendemigeliyorusn" -> ["sen", "de", "mi", "geliyorsun"]
+63.000+ kelimelik sözlük tabanlı.
 """
 
 from typing import List, Tuple
-from src.dictionary import BASE_TURKISH_WORDS, get_word_prob
+from src.dictionary import is_valid_word, get_word_prob
 from src.speller import correct_word
 
 MAX_WORD_LEN = 20
@@ -12,7 +12,6 @@ MAX_WORD_LEN = 20
 def segment_text(text: str) -> List[str]:
     """
     Dinamik programlama (Viterbi) ile bitişik yazılmış metni kelimelere ayırır ve düzeltir.
-    Öncelikle tam sözlük eşleşmelerini ödüllendirir.
     """
     clean_text = text.lower().strip()
     n = len(clean_text)
@@ -30,13 +29,13 @@ def segment_text(text: str) -> List[str]:
         max_j = min(n + 1, i + MAX_WORD_LEN + 1)
         for j in range(i + 1, max_j):
             chunk = clean_text[i:j]
-            if chunk in BASE_TURKISH_WORDS:
+            if is_valid_word(chunk):
                 cost = best_cost[i] + get_word_prob(chunk)
                 if cost > best_cost[j]:
                     best_cost[j] = cost
                     best_match[j] = (i, chunk)
 
-    # Eğer doğrudan sözlükle sona ulaştıysak direkt dönebiliriz
+    # Eğer doğrudan sözlükle sona ulaşıldıysa
     if best_cost[n] > float('-inf'):
         words = []
         idx = n
@@ -46,8 +45,7 @@ def segment_text(text: str) -> List[str]:
             idx = prev_idx
         return words
 
-    # Faz 2: Sona ulaşılamadıysa (imla hatası var, örn: "geliyorusn"),
-    # Kalan son parçayı veya aday parçaları düzeltmeyle birleştir
+    # Faz 2: Sona ulaşılamadıysa (harf hatası var), aday parçaları düzeltmeyle dene
     best_cost = [float('-inf')] * (n + 1)
     best_cost[0] = 0.0
     best_match = [None] * (n + 1)
@@ -58,17 +56,16 @@ def segment_text(text: str) -> List[str]:
         max_j = min(n + 1, i + MAX_WORD_LEN + 1)
         for j in range(i + 1, max_j):
             chunk = clean_text[i:j]
-            if chunk in BASE_TURKISH_WORDS:
-                # Sözlükte olan parçalara bonus (+5) ver
+            if is_valid_word(chunk):
+                # Sözlükte olan tam parçalara öncelik
                 cost = best_cost[i] + get_word_prob(chunk) + 5.0
                 if cost > best_cost[j]:
                     best_cost[j] = cost
                     best_match[j] = (i, chunk)
             else:
-                # Sadece uzun parçalar (>=4 harf) veya metnin sonuna denk gelenler için düzeltme dene
                 if len(chunk) >= 4 or j == n:
                     corrected = correct_word(chunk)
-                    if corrected in BASE_TURKISH_WORDS and corrected != chunk:
+                    if is_valid_word(corrected) and corrected != chunk:
                         cost = best_cost[i] + get_word_prob(corrected)
                         if cost > best_cost[j]:
                             best_cost[j] = cost
@@ -79,7 +76,6 @@ def segment_text(text: str) -> List[str]:
     while idx > 0:
         match = best_match[idx]
         if match is None:
-            # Fallback
             words.insert(0, clean_text[:idx])
             break
         prev_idx, word = match

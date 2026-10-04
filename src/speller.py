@@ -1,9 +1,10 @@
 """
 Damerau-Levenshtein tabanlı ve Türkçe karakter destekli Yazım Düzeltici (Speller).
+63.000+ kelimelik sözlük üzerinden hızlı filtreleme ve düzeltme.
 """
 
 from typing import List, Tuple, Set
-from src.dictionary import BASE_TURKISH_WORDS, TOTAL_WORDS
+from src.dictionary import is_valid_word, get_word_prob, ALL_TURKISH_WORDS
 
 TURKISH_ALPHABET = "abcçdefgğhıijklmnoöprsştuüvyz"
 
@@ -22,35 +23,33 @@ def edits2(word: str) -> set:
 
 def correct_word(word: str, max_distance: int = 2) -> str:
     """
-    Tek bir kelimeyi en yüksek olasılıklı Türkçe haline düzeltir.
-    Önemli: Çok kısa kelimeleri (<=3 harf) bambaşka kelimelere dönüştürmez!
+    Tek bir kelimeyi 63.000+ Türkçe kelime arasından en yüksek frekanslı haline düzeltir.
     """
     word_clean = word.lower()
     
-    # 1. Kelime zaten sözlükte varsa doğrudan dön
-    if word_clean in BASE_TURKISH_WORDS:
+    # 1. Kelime zaten geçerliyse doğrudan dön
+    if is_valid_word(word_clean):
         return word_clean
 
-    # Çok kısa kelimelerde sadece 1 mesafeye izin ver (kelime yozlaşmasını önlemek için)
+    # Çok kısa kelimelerde (<=3 harf) kelime yozlaşmasını önle
     if len(word_clean) <= 3:
-        candidates1 = [w for w in edits1(word_clean) if w in BASE_TURKISH_WORDS and len(w) == len(word_clean)]
+        candidates1 = [w for w in edits1(word_clean) if is_valid_word(w) and len(w) == len(word_clean)]
         if candidates1:
-            return max(candidates1, key=lambda w: BASE_TURKISH_WORDS[w])
+            return max(candidates1, key=get_word_prob)
         return word_clean
 
     # 2. 1-adım mesafedeki bilinen kelimeler
-    candidates1 = [w for w in edits1(word_clean) if w in BASE_TURKISH_WORDS]
+    candidates1 = [w for w in edits1(word_clean) if is_valid_word(w)]
     if candidates1:
-        return max(candidates1, key=lambda w: BASE_TURKISH_WORDS[w])
+        return max(candidates1, key=get_word_prob)
 
     if max_distance >= 2:
-        # 3. 2-adım mesafedeki bilinen kelimeler (uzunluk farkı en fazla 1 olmalı)
+        # 3. 2-adım mesafedeki bilinen kelimeler
         candidates2 = [
             w for w in edits2(word_clean) 
-            if w in BASE_TURKISH_WORDS and abs(len(w) - len(word_clean)) <= 1
+            if is_valid_word(w) and abs(len(w) - len(word_clean)) <= 1
         ]
         if candidates2:
-            return max(candidates2, key=lambda w: BASE_TURKISH_WORDS[w])
+            return max(candidates2, key=get_word_prob)
 
-    # Düzeltilemezse orijinali koru
     return word_clean
