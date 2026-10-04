@@ -1,0 +1,3 @@
+#!/bin/bash
+# Çevrimdışı Türkçe Otomatik Düzeltici Global Başlatıcı
+PYTHONPATH=/home/enes/antigravity/optimistic-kepler /home/enes/antigravity/optimistic-kepler/.venv/bin/python -m src.cli "$@"

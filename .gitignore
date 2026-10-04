@@ -1,0 +1,18 @@
+# Python / Ortam
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Ham İndirme Dosyaları (sadece işlenmiş pkl kalır)
+data/*.txt
+data/*.json
+models/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
