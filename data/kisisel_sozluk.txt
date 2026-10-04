@@ -1,0 +1,29 @@
+# Kişisel Türkçe ve Discord Sözlüğü
+# Buraya arkadaşlarınla sık kullandığın özel lakapları, oyun terimlerini
+# veya bozmasını istemediğin özel kelimeleri alt alta yazabilirsin.
+# Sistem bu kelimeleri otomatik öğrenir ve her zaman en yüksek öncelikle korur.
+
+agalar
+dc
+kral
+hocam
+reis
+kanka
+moruk
+keko
+toxic
+feedlemek
+clutch
+diff
+noob
+ez
+gg
+wp
+lan
+amk
+aq
+valla
+billahi
+yav
+he
+heya

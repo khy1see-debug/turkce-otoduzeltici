@@ -8,6 +8,7 @@ env/
 
 # Ham İndirme Dosyaları (sadece işlenmiş pkl kalır)
 data/*.txt
+!data/kisisel_sozluk.txt
 data/*.json
 models/
 

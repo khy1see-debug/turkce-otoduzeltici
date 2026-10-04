@@ -34,6 +34,21 @@ if os.path.exists(DATA_PATH):
 
 # İngilizce teknoloji/oyun terimleri ve temel Türkçe kısa kelimeler
 ALL_TURKISH_WORDS.update(COMMON_ENGLISH_TERMS)
+
+# Kişisel Sözlük / Discord kelimeleri yükleme
+PERSONAL_DICT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "kisisel_sozluk.txt")
+PERSONAL_WORDS: Set[str] = set()
+if os.path.exists(PERSONAL_DICT_PATH):
+    try:
+        with open(PERSONAL_DICT_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                w = line.strip().lower()
+                if w and not w.startswith("#"):
+                    PERSONAL_WORDS.add(w)
+                    ALL_TURKISH_WORDS.add(w)
+    except Exception as e:
+        print(f"Kişisel sözlük okuma hatası: {e}")
+
 ALL_TURKISH_WORDS.add("o")
 ALL_TURKISH_WORDS.add("su")
 ALL_TURKISH_WORDS.add("ev")
@@ -73,6 +88,9 @@ def get_word_prob(word: str) -> float:
     w = word.lower()
     if w in BLOCKED_SHORT_CHUNKS:
         return -50.0
+
+    if w in PERSONAL_WORDS:
+        return math.log(0.040) + (len(w) * 0.4)
 
     if w in HIGH_PRIORITY_COLLOQUIAL:
         return math.log(HIGH_PRIORITY_COLLOQUIAL[w]) + (len(w) * 0.4)
