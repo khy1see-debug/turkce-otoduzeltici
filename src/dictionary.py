@@ -1,11 +1,16 @@
 """
-Kapsamlı Türkçe Sözlük ve Frekans Tablosu (0-token, offline).
-63.000+ gerçek Türkçe kelime haznesi ve kısaltma/harf koruma kuralları.
+1.170.000+ Kelimelik Devasa Türkçe Sözlük ve Frekans Tablosu (0-Token, Offline).
+Zemberek çekimleri, TDK resmi sözlüğü ve wordfreq frekansları birleştirildi.
 """
 
+import os
 import math
-from typing import Optional
-from wordfreq import word_frequency, iter_wordlist
+import pickle
+from functools import lru_cache
+from typing import Set
+from wordfreq import word_frequency
+
+DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "turkish_words_huge.pkl")
 
 # Tek harfli veya anlamsız kısaltmaların kelime parçalama sırasında suistimal edilmesini önleme
 BLOCKED_SHORT_CHUNKS = {
@@ -13,11 +18,19 @@ BLOCKED_SHORT_CHUNKS = {
     "b", "c", "ç", "d", "e", "f", "g", "ğ", "h", "ı", "i", "j", "k", "l", "m", "n", "p", "r", "s", "ş", "t", "u", "ü", "v", "y", "z"
 }
 
-# 63.000+ kelimelik tam Türkçe sözlük seti
-ALL_TURKISH_WORDS = set(iter_wordlist("tr")) - BLOCKED_SHORT_CHUNKS
+# 1.170.000+ kelimelik devasa sözlük seti
+ALL_TURKISH_WORDS: Set[str] = set()
+
+if os.path.exists(DATA_PATH):
+    try:
+        with open(DATA_PATH, "rb") as f:
+            ALL_TURKISH_WORDS = pickle.load(f) - BLOCKED_SHORT_CHUNKS
+    except Exception as e:
+        print(f"Uyarı: Devasa sözlük yüklenirken hata oluştu: {e}")
+
 ALL_TURKISH_WORDS.add("o")  # 'o' zamir olarak geçerlidir
 
-# Soru ekleri ve bağlaçlar gibi kritik kısa kelimelerin frekans taban puanları
+# Kritik dilbilgisi bağlaç ve soru ekleri taban puanları
 CRITICAL_GRAMMAR_WORDS = {
     "de": 0.025, "da": 0.026,
     "mi": 0.020, "mı": 0.021, "mu": 0.012, "mü": 0.011,
@@ -26,10 +39,11 @@ CRITICAL_GRAMMAR_WORDS = {
 }
 
 def is_valid_word(word: str) -> bool:
-    """Kelimenin Türkçe sözlükte olup olmadığını O(1) hızla kontrol eder."""
+    """Kelimenin 1.17M Türkçe kelime havuzunda olup olmadığını O(1) hızla kontrol eder."""
     w = word.lower()
     return w in ALL_TURKISH_WORDS or w in CRITICAL_GRAMMAR_WORDS
 
+@lru_cache(maxsize=100000)
 def get_word_prob(word: str) -> float:
     """
     Kelimenin log-olasılığını döner.
@@ -42,8 +56,12 @@ def get_word_prob(word: str) -> float:
         freq = word_frequency(w, "tr")
     
     if freq > 0:
-        # Kelime uzunluğuna göre küçük bir log-bonus (daha uzun kelimeleri tercih eder)
         return math.log(freq) + (len(w) * 0.4)
+    
+    # Kelime sözlükte var ama wordfreq'te yoksa (çekimli kelime vs.)
+    if w in ALL_TURKISH_WORDS:
+        # Orta düzey frekans ver (-12.0)
+        return -12.0 + (len(w) * 0.4)
     
     # Bilinmeyen kelimeler için uzunluğa göre ceza
     return -25.0 - (2.0 * len(word))

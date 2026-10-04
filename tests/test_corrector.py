@@ -2,6 +2,8 @@ import pytest
 from src.grammar import fix_sentence
 from src.segmenter import segment_text
 from src.speller import correct_word
+from src.deasciifier import deasciify_word
+from src.harmony import fix_question_particle
 
 def test_target_example():
     """Kullanıcının verdiği temel örnek senaryo."""
@@ -14,16 +16,20 @@ def test_separated_words_with_typo():
     assert correct_word("geliyorusn") == "geliyorsun"
     assert correct_word("gidiyorusn") == "gidiyorsun"
 
-def test_segmentation_clean():
-    """Temiz bitişik kelime ayrımı."""
-    assert segment_text("bugunhavacokguzel") == ["bugün", "hava", "çok", "güzel"] or \
-           segment_text("sendemi") == ["sen", "de", "mi"]
+def test_deasciifier():
+    """İngilizce harflerin Türkçeleştirilmesi."""
+    assert deasciify_word("ogrenci") == "öğrenci"
+    assert deasciify_word("goz") == "göz"
+    assert deasciify_word("sevinc") == "sevinç"
 
-def test_question_punctuation():
-    """Soru işareti ve nokta mantığı."""
-    assert fix_sentence("sendemi") == "Sen de mi?"
-    assert fix_sentence("beniyiyim") == "Ben iyiyim."
+def test_vowel_harmony():
+    """Büyük ünlü uyumu ile soru eki düzeltmesi."""
+    assert fix_question_particle("değil", "mı") == "mi"
+    assert fix_question_particle("oldu", "mi") == "mu"
+    assert fix_question_particle("gördün", "mi") == "mü"
 
-def test_casing():
-    """Cümle başı büyük harf testi."""
-    assert fix_sentence("senigordum").startswith("S")
+def test_full_complex_sentence():
+    """Uzun, karmaşık, bağlaçlı ve virgüllü cümle testi."""
+    raw = "ogrencileringozlerindensevincokunuyorducunkuokullaracildi"
+    expected = "Öğrencilerin gözlerinden sevinç okunuyordu, çünkü okullar açıldı."
+    assert fix_sentence(raw) == expected

@@ -1,24 +1,26 @@
 """
 Bitişik yazılmış Türkçe metinleri ayırma modülü (Word Segmentation / Viterbi).
-63.000+ kelimelik sözlük tabanlı.
+1.17M kelimelik sözlük tabanlı ve Deasciifier entegreli.
 """
 
 from typing import List, Tuple
 from src.dictionary import is_valid_word, get_word_prob
 from src.speller import correct_word
+from src.deasciifier import deasciify_word
 
-MAX_WORD_LEN = 20
+MAX_WORD_LEN = 22
 
 def segment_text(text: str) -> List[str]:
     """
     Dinamik programlama (Viterbi) ile bitişik yazılmış metni kelimelere ayırır ve düzeltir.
+    De-asciifier ve speller ile kombine çalışır.
     """
     clean_text = text.lower().strip()
     n = len(clean_text)
     if n == 0:
         return []
 
-    # Faz 1: Doğrudan sözlükte var olan kelimelerle Viterbi dene
+    # Faz 1: Doğrudan sözlükte veya deasciify edilmiş halinde var olan kelimelerle Viterbi
     best_cost = [float('-inf')] * (n + 1)
     best_cost[0] = 0.0
     best_match = [None] * (n + 1)
@@ -29,13 +31,20 @@ def segment_text(text: str) -> List[str]:
         max_j = min(n + 1, i + MAX_WORD_LEN + 1)
         for j in range(i + 1, max_j):
             chunk = clean_text[i:j]
-            if is_valid_word(chunk):
+            # Önce deasciify dene
+            deasc = deasciify_word(chunk)
+            if is_valid_word(deasc):
+                cost = best_cost[i] + get_word_prob(deasc)
+                if cost > best_cost[j]:
+                    best_cost[j] = cost
+                    best_match[j] = (i, deasc)
+            elif is_valid_word(chunk):
                 cost = best_cost[i] + get_word_prob(chunk)
                 if cost > best_cost[j]:
                     best_cost[j] = cost
                     best_match[j] = (i, chunk)
 
-    # Eğer doğrudan sözlükle sona ulaşıldıysa
+    # Eğer doğrudan sözlük veya deasciify ile sona ulaşıldıysa
     if best_cost[n] > float('-inf'):
         words = []
         idx = n
@@ -45,7 +54,7 @@ def segment_text(text: str) -> List[str]:
             idx = prev_idx
         return words
 
-    # Faz 2: Sona ulaşılamadıysa (harf hatası var), aday parçaları düzeltmeyle dene
+    # Faz 2: Harf hatası düzeltme (Speller) ile kombine Viterbi
     best_cost = [float('-inf')] * (n + 1)
     best_cost[0] = 0.0
     best_match = [None] * (n + 1)
@@ -56,8 +65,13 @@ def segment_text(text: str) -> List[str]:
         max_j = min(n + 1, i + MAX_WORD_LEN + 1)
         for j in range(i + 1, max_j):
             chunk = clean_text[i:j]
-            if is_valid_word(chunk):
-                # Sözlükte olan tam parçalara öncelik
+            deasc = deasciify_word(chunk)
+            if is_valid_word(deasc):
+                cost = best_cost[i] + get_word_prob(deasc) + 5.0
+                if cost > best_cost[j]:
+                    best_cost[j] = cost
+                    best_match[j] = (i, deasc)
+            elif is_valid_word(chunk):
                 cost = best_cost[i] + get_word_prob(chunk) + 5.0
                 if cost > best_cost[j]:
                     best_cost[j] = cost
@@ -82,4 +96,4 @@ def segment_text(text: str) -> List[str]:
         words.insert(0, word)
         idx = prev_idx
 
-    return [correct_word(w) for w in words]
+    return [deasciify_word(correct_word(w)) for w in words]
