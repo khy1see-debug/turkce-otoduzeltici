@@ -1,10 +1,11 @@
 """
 Türkçe Dilbilgisi, Ek Ayrımı, Noktalama ve İki Aşamalı Düzeltici.
 Hibrit Mimari:
-1. De-asciifier + Segmenter + Speller (Bitişik kelimeleri, harf hatalarını ve Türkçe karakterleri çözer)
-2. İyelik & Tamlayan Tespiti (Örnek: 'reis yetkisi oldu' -> 'Reis'in yetkisi oldu')
-3. Ünlü Uyumu Motoru (-mi/-mı/-mu/-mü tam uyumu)
-4. Akıllı Noktalama & Bağlaç Motoru (Virgül, soru işareti, büyük harf, -de/-da)
+1. Chat Kısaltmaları & Argo Açıcı (slm -> selam, knk -> kanka, tsk -> teşekkürler)
+2. De-asciifier + Segmenter + Speller (Bitişik kelimeleri, harf hatalarını ve Türkçe karakterleri çözer)
+3. İyelik & Tamlayan Tespiti (Örnek: 'reis yetkisi oldu' -> 'Reis'in yetkisi oldu')
+4. Ünlü Uyumu Motoru (-mi/-mı/-mu/-mü tam uyumu)
+5. Akıllı Noktalama & Bağlaç Motoru (Virgül, soru işareti, büyük harf, -de/-da)
 """
 
 import re
@@ -13,6 +14,7 @@ from src.segmenter import segment_text
 from src.speller import correct_word
 from src.deasciifier import deasciify_word
 from src.harmony import fix_question_particle, get_genitive_suffix
+from src.slang import expand_slang
 
 QUESTION_PARTICLES = {"mi", "mı", "mu", "mü", "misin", "mısın", "musun", "müsün", "miyiz", "mıyız"}
 CONJUNCTION_PARTICLES = {"de", "da"}
@@ -29,13 +31,14 @@ POSSESSIVE_NOUNS = {
 def fix_sentence(raw_text: str) -> str:
     """
     Kullanıcının girdiği ham metni alır:
-    1. Bitişik kelimeleri ayırır (sendemigeliyorusn -> sen de mi geliyorsun).
-    2. Türkçe harfleri tamamlar (ogrenci -> öğrenci, agac -> ağaç).
-    3. Harf hatalarını 1.17M Türkçe sözlükle düzeltir.
-    4. Tamlayan eklerini bağlar (Reis yetkisi -> Reis'in yetkisi).
-    5. Soru eklerini ünlü uyumuna göre hizalar (değil mi, oldu mu).
-    6. Cümle başı büyük harf yapar.
-    7. Cümle içi ve sonu noktalama işaretlerini (., ?, !, ,) akıllıca yerleştirir.
+    1. Chat kısaltmalarını açar (slm -> selam, tşk -> teşekkürler).
+    2. Bitişik kelimeleri ayırır (sendemigeliyorusn -> sen de mi geliyorsun).
+    3. Türkçe harfleri tamamlar (ogrenci -> öğrenci, agac -> ağaç).
+    4. Harf hatalarını 1.17M Türkçe sözlükle düzeltir.
+    5. Tamlayan eklerini bağlar (Reis yetkisi -> Reis'in yetkisi).
+    6. Soru eklerini ünlü uyumuna göre hizalar (değil mi, oldu mu).
+    7. Cümle başı büyük harf yapar.
+    8. Cümle içi ve sonu noktalama işaretlerini (., ?, !, ,) akıllıca yerleştirir.
     """
     raw_text = raw_text.strip()
     if not raw_text:
@@ -45,12 +48,21 @@ def fix_sentence(raw_text: str) -> str:
     processed_words: List[str] = []
 
     for token in tokens:
-        # Noktalama işaretlerinden arındırarak işle
-        clean_token = re.sub(r'[^\wçğıöşüÇĞİÖŞÜ]', '', token)
+        clean_token = re.sub(r'[^\wçğıöşüÇĞİÖŞÜ]', '', token).lower()
+        if not clean_token:
+            continue
+
+        # 1. Aşama: Chat Kısaltması Kontrolü (slm -> selam, knk -> kanka vb.)
+        slang_expanded = expand_slang(clean_token)
+        if slang_expanded:
+            processed_words.extend(slang_expanded.split())
+            continue
+
+        # 2. Aşama: Segmenter veya tek kelime düzeltici
         if len(clean_token) > 4:
             segmented = segment_text(clean_token)
             processed_words.extend(segmented)
-        elif clean_token:
+        else:
             deasc = deasciify_word(clean_token)
             corrected = correct_word(deasc)
             processed_words.append(corrected)
@@ -58,7 +70,7 @@ def fix_sentence(raw_text: str) -> str:
     if not processed_words:
         return ""
 
-    # 1. -de / -da bağlacı ayrımı:
+    # -de / -da bağlacı ayrımı:
     final_tokens: List[str] = []
     for i, w in enumerate(processed_words):
         if w.lower() == "bende":
@@ -76,9 +88,7 @@ def fix_sentence(raw_text: str) -> str:
 
     processed_words = final_tokens
 
-    # 2. İyelik ve Tamlayan (Genitive Case) İlişkisi:
-    # Eğer cümlede bir iyelik eki ('yetkisi') varsa ve baştaki kelime özne/isim ise ('reis'),
-    # özneye kesme işaretiyle tamlayan eki ekle ('Reis'in').
+    # İyelik ve Tamlayan (Genitive Case) İlişkisi:
     has_possessive = any(w.lower() in POSSESSIVE_NOUNS for w in processed_words[1:])
     if has_possessive and len(processed_words) > 1:
         first = processed_words[0].lower()
@@ -86,14 +96,14 @@ def fix_sentence(raw_text: str) -> str:
             suffix = get_genitive_suffix(processed_words[0])
             processed_words[0] = processed_words[0] + suffix
 
-    # 3. Soru eki ünlü uyumu düzeltmesi (-mi/-mı/-mu/-mü)
+    # Soru eki ünlü uyumu düzeltmesi (-mi/-mı/-mu/-mü)
     for i in range(1, len(processed_words)):
         w = processed_words[i].lower()
         if w in {"mi", "mı", "mu", "mü"}:
             prev = processed_words[i - 1]
             processed_words[i] = fix_question_particle(prev, w)
 
-    # 4. Cümle başı büyük harf (Türkçe İ / I kuralı)
+    # Cümle başı büyük harf (Türkçe İ / I kuralı)
     first_word = processed_words[0]
     if first_word.startswith("i"):
         processed_words[0] = "İ" + first_word[1:]
@@ -102,14 +112,14 @@ def fix_sentence(raw_text: str) -> str:
     else:
         processed_words[0] = first_word.capitalize()
 
-    # 5. Soru tespiti
+    # Soru tespiti
     is_question = False
     for word in processed_words:
         if word.lower() in QUESTION_PARTICLES or word.lower() in {"neden", "niçin", "nerede", "kim", "nasıl", "hangi", "kaç"}:
             is_question = True
             break
 
-    # 6. Bağlaçlardan önce otomatik virgül koyma
+    # Bağlaçlardan önce otomatik virgül koyma
     reconstructed: List[str] = []
     for i, word in enumerate(processed_words):
         if i > 0 and word.lower() in CLAUSE_CONNECTORS:
@@ -119,7 +129,7 @@ def fix_sentence(raw_text: str) -> str:
 
     sentence = " ".join(reconstructed)
 
-    # 7. Cümle sonu noktalama
+    # Cümle sonu noktalama
     if not sentence.endswith((".", "?", "!")):
         if is_question:
             sentence += "?"

@@ -1,11 +1,11 @@
 #!/bin/bash
 # Instagram/Tarayıcı ve tüm pencerelerle %100 uyumlu Türkçe otomatik düzeltme
+# Ses efekti ve Akıllı Kısaltma desteği
 
-# 1. Eski panoyu temizle veya işaretle
+# 1. Eski panoyu al
 OLD_CLIP=$(wl-paste 2>/dev/null)
 
-# 2. Seçili metni kopyala (Klavye tuş simülasyonu)
-# Windows tuşunu bıraktığından emin olmak için küçük bekleme
+# 2. Seçili metni kopyala
 sleep 0.1
 wtype -M ctrl c -m ctrl
 sleep 0.2
@@ -14,7 +14,6 @@ sleep 0.2
 NEW_CLIP=$(wl-paste 2>/dev/null)
 PRIMARY_CLIP=$(wl-paste --primary 2>/dev/null)
 
-# Eğer yeni bir kopyalama yapıldıysa NEW_CLIP'i kullan, yoksa primary seçimi dene
 if [ -n "$NEW_CLIP" ] && [ "$NEW_CLIP" != "$OLD_CLIP" ]; then
     TARGET_TEXT="$NEW_CLIP"
 elif [ -n "$PRIMARY_CLIP" ]; then
@@ -40,6 +39,9 @@ if [ -n "$FIXED_TEXT" ]; then
     sleep 0.1
     wtype -M ctrl v -m ctrl
     
-    # Bildirim
+    # 7. Zarif Ses Efekti (Arka planda çalar, bekletmez)
+    paplay /usr/share/sounds/freedesktop/stereo/message-new-instant.oga 2>/dev/null &
+    
+    # 8. Bildirim
     notify-send -a "Türkçe Düzeltici" -i edit-paste -t 2000 "Düzeltildi ✨" "$FIXED_TEXT"
 fi
