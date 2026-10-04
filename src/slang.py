@@ -1,18 +1,32 @@
 """
 Türkçe Chat Kısaltmaları ve Günlük Konuşma Genişletici (Slang Expander).
 Örnek:
+  fln / falan -> falan
+  flnsal -> falansal
+  vb -> ve benzeri
+  vs -> ve benzeri
   slm -> selam
   knk -> kanka
   nbr -> naber
   tsk / tskler -> teşekkürler
   eyw / eyv -> eyvallah
-  hg / hb -> hoş geldin / hoş bulduk
-  gelcenmi -> gelecek misin
 """
 
 from typing import Optional
 
 CHAT_SLANG_MAP = {
+    # Günlük Konuşma Doldurma Kelimeleri (fln, falan, vb)
+    "fln": "falan",
+    "flan": "falan",
+    "flnsal": "falansal",
+    "falansal": "falansal",
+    "vb": "ve benzeri",
+    "vs": "ve benzeri",
+    "v.b": "ve benzeri",
+    "v.s": "ve benzeri",
+    "filan": "falan",
+
+    # Selamlaşma & Vedalaşma
     "slm": "selam",
     "mrb": "merhaba",
     "nbr": "naber",
@@ -50,13 +64,19 @@ CHAT_SLANG_MAP = {
     "nys": "neyse",
     "snrm": "sanırım",
     "bence": "bence",
+
+    # Fiil Kısaltmaları (gelcenmi, gidiyonmu vb.)
     "gelcenmi": "gelecek misin",
     "geliyonmu": "geliyor musun",
     "gidiyonmu": "gidiyor musun",
     "yapiyonmu": "yapıyor musun",
     "napion": "ne yapıyorsun",
     "napiyon": "ne yapıyorsun",
-    "napıyosun": "ne yapıyorsun"
+    "napıyosun": "ne yapıyorsun",
+    "yazamiom": "yazamıyorum",
+    "yapamiom": "yapamıyorum",
+    "gidemiom": "gidemiyorum",
+    "gelemiom": "gelemiyorum"
 }
 
 def expand_slang(token: str) -> Optional[str]:
