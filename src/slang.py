@@ -16,6 +16,17 @@ from typing import Optional
 
 CHAT_SLANG_MAP = {
     # Günlük Konuşma Doldurma Kelimeleri (fln, falan, vb)
+    "bune": "bu ne",
+    "şune": "şu ne",
+    "one": "o ne",
+    "içerdeyim": "içerideyim",
+    "icerdeyim": "içerideyim",
+    "dışardayım": "dışarıdayım",
+    "disardayim": "dışarıdayım",
+    "yukardayım": "yukarıdayım",
+    "aşağdayım": "aşağıdayım",
+    "burdayım": "buradayım",
+    "şurdayım": "şuradayım",
     "fln": "falan",
     "flan": "falan",
     "flnsal": "falansal",
