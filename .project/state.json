@@ -1,0 +1,136 @@
+{
+  "schema_version": 3,
+  "revision": 0,
+  "project": {
+    "id": "turkce-otoduzeltici",
+    "name": "Çevrimdışı Türkçe Otomatik Düzeltici",
+    "goal": "Bitişik yazılan (sendemigeliyorusn gibi), hatalı Türkçe metinleri çevrimdışı, 0-token maliyetiyle düzeltmek",
+    "audience": "Hızlı ve hatasız Türkçe yazmak isteyen kullanıcılar",
+    "scope": [
+      "Bitişik kelime ayırma",
+      "Yazım denetimi",
+      "Soru eki ve bağlaç ayrımı",
+      "CLI ve kütüphane"
+    ],
+    "out_of_scope": [
+      "Ücretli cloud API bağımlılığı"
+    ],
+    "constraints": [
+      "Tamamen yerel ve 0-token çalışmalı",
+      "Python 3.10+ uyumlu"
+    ],
+    "open_questions": []
+  },
+  "ontology": {
+    "object_types": [
+      {
+        "id": "modul",
+        "label": "Yazılım Modülü",
+        "properties": {
+          "path": {
+            "type": "string",
+            "required": true,
+            "enum": null
+          },
+          "status": {
+            "type": "string",
+            "required": true,
+            "enum": [
+              "taslak",
+              "hazir",
+              "test_edildi"
+            ]
+          }
+        }
+      }
+    ],
+    "relation_types": []
+  },
+  "objects": [
+    {
+      "id": "modul-segmenter",
+      "type": "modul",
+      "label": "Segmenter Modülü",
+      "properties": {
+        "path": "src/segmenter.py",
+        "status": "taslak"
+      }
+    },
+    {
+      "id": "modul-speller",
+      "type": "modul",
+      "label": "Yazım Düzeltme Modülü",
+      "properties": {
+        "path": "src/speller.py",
+        "status": "taslak"
+      }
+    },
+    {
+      "id": "modul-grammar",
+      "type": "modul",
+      "label": "Dilbilgisi ve Noktalama Modülü",
+      "properties": {
+        "path": "src/grammar.py",
+        "status": "taslak"
+      }
+    }
+  ],
+  "relations": [],
+  "tasks": [
+    {
+      "id": "T-MOTOR",
+      "title": "Segmenter, Speller ve Dilbilgisi motorunu oluştur",
+      "status": "todo",
+      "object_ids": [
+        "modul-segmenter",
+        "modul-speller",
+        "modul-grammar"
+      ],
+      "input_ids": [],
+      "output_ids": [
+        "modul-segmenter",
+        "modul-speller",
+        "modul-grammar"
+      ],
+      "depends_on": [],
+      "decision_ids": [],
+      "acceptance": [
+        "Segmenter bitişik kelimeleri ayırabilmeli",
+        "Speller harf hatalarını düzeltebilmeli"
+      ],
+      "evidence": [],
+      "input_snapshot": null,
+      "generation": 0,
+      "review_reasons": []
+    },
+    {
+      "id": "T-TEST",
+      "title": "'sendemigeliyorusn' ve varyant testlerini yaz ve doğrula",
+      "status": "todo",
+      "object_ids": [
+        "modul-segmenter",
+        "modul-speller",
+        "modul-grammar"
+      ],
+      "input_ids": [
+        "modul-segmenter",
+        "modul-speller",
+        "modul-grammar"
+      ],
+      "output_ids": [],
+      "depends_on": [
+        "T-MOTOR"
+      ],
+      "decision_ids": [],
+      "acceptance": [
+        "pytest ile tüm testler sıfır hata ile geçmeli"
+      ],
+      "evidence": [],
+      "input_snapshot": null,
+      "generation": 0,
+      "review_reasons": []
+    }
+  ],
+  "decisions": [],
+  "history": []
+}

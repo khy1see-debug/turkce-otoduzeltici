@@ -1,0 +1,65 @@
+# Builds & Caches
+dist/
+build/
+out/
+.cache/
+__pycache__/
+*.pyc
+.next/
+.nuxt/
+.vite/
+.turbo/
+target/
+
+# Dependencies & Environments
+node_modules/
+vendor/
+.venv/
+venv/
+env/
+
+# Test Artifacts & Coverage
+coverage/
+.coverage*
+htmlcov/
+**/__snapshots__/
+test-results/
+
+# Heavy Locks (keep semantic manifests like package.json, pyproject.toml intact)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+poetry.lock
+Pipfile.lock
+Cargo.lock
+
+# Logs, Dumps & Temp Files
+*.log
+*.tmp
+tmp/
+temp/
+.DS_Store
+Thumbs.db
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+.vs/
+
+# Media & Archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.mp4
+*.mov
+*.avi
+
+# Secrets & Credentials
+.env*
+!.env.example
+*.pem
+*.key
+secrets.json
+credentials.json
+token.json
