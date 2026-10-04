@@ -2,8 +2,9 @@
 Türkçe Dilbilgisi, Ek Ayrımı, Noktalama ve İki Aşamalı Düzeltici.
 Hibrit Mimari:
 1. De-asciifier + Segmenter + Speller (Bitişik kelimeleri, harf hatalarını ve Türkçe karakterleri çözer)
-2. Ünlü Uyumu Motoru (-mi/-mı/-mu/-mü tam uyumu)
-3. Akıllı Noktalama & Bağlaç Motoru (Virgül, soru işareti, büyük harf, -de/-da)
+2. İyelik & Tamlayan Tespiti (Örnek: 'reis yetkisi oldu' -> 'Reis'in yetkisi oldu')
+3. Ünlü Uyumu Motoru (-mi/-mı/-mu/-mü tam uyumu)
+4. Akıllı Noktalama & Bağlaç Motoru (Virgül, soru işareti, büyük harf, -de/-da)
 """
 
 import re
@@ -11,7 +12,7 @@ from typing import List
 from src.segmenter import segment_text
 from src.speller import correct_word
 from src.deasciifier import deasciify_word
-from src.harmony import fix_question_particle
+from src.harmony import fix_question_particle, get_genitive_suffix
 
 QUESTION_PARTICLES = {"mi", "mı", "mu", "mü", "misin", "mısın", "musun", "müsün", "miyiz", "mıyız"}
 CONJUNCTION_PARTICLES = {"de", "da"}
@@ -19,15 +20,22 @@ CONJUNCTION_PARTICLES = {"de", "da"}
 # Karşıtlık ve sıralama bağlaçları (öncesinde virgül konulması gereken durumlar)
 CLAUSE_CONNECTORS = {"ama", "fakat", "ancak", "lakin", "çünkü", "halbuki", "oysa", "oysaki"}
 
+# Sık kullanılan 3. tekil iyelik eki almış isimler (tamlayan gerektiren durumlar)
+POSSESSIVE_NOUNS = {
+    "yetkisi", "arabası", "telefonu", "evi", "parası", "fikri", "hakkı",
+    "işi", "çocuğu", "annesi", "babası", "kardeşi", "arkadaşı", "hatası", "suçu"
+}
+
 def fix_sentence(raw_text: str) -> str:
     """
     Kullanıcının girdiği ham metni alır:
     1. Bitişik kelimeleri ayırır (sendemigeliyorusn -> sen de mi geliyorsun).
     2. Türkçe harfleri tamamlar (ogrenci -> öğrenci, agac -> ağaç).
     3. Harf hatalarını 1.17M Türkçe sözlükle düzeltir.
-    4. Soru eklerini ünlü uyumuna göre hizalar (değil mi, oldu mu).
-    5. Cümle başı büyük harf yapar.
-    6. Cümle içi ve sonu noktalama işaretlerini (., ?, !, ,) akıllıca yerleştirir.
+    4. Tamlayan eklerini bağlar (Reis yetkisi -> Reis'in yetkisi).
+    5. Soru eklerini ünlü uyumuna göre hizalar (değil mi, oldu mu).
+    6. Cümle başı büyük harf yapar.
+    7. Cümle içi ve sonu noktalama işaretlerini (., ?, !, ,) akıllıca yerleştirir.
     """
     raw_text = raw_text.strip()
     if not raw_text:
@@ -68,14 +76,24 @@ def fix_sentence(raw_text: str) -> str:
 
     processed_words = final_tokens
 
-    # 2. Soru eki ünlü uyumu düzeltmesi (-mi/-mı/-mu/-mü)
+    # 2. İyelik ve Tamlayan (Genitive Case) İlişkisi:
+    # Eğer cümlede bir iyelik eki ('yetkisi') varsa ve baştaki kelime özne/isim ise ('reis'),
+    # özneye kesme işaretiyle tamlayan eki ekle ('Reis'in').
+    has_possessive = any(w.lower() in POSSESSIVE_NOUNS for w in processed_words[1:])
+    if has_possessive and len(processed_words) > 1:
+        first = processed_words[0].lower()
+        if first not in {"bu", "şu", "o", "ben", "sen", "biz", "siz", "her", "bir", "ne", "nasıl"}:
+            suffix = get_genitive_suffix(processed_words[0])
+            processed_words[0] = processed_words[0] + suffix
+
+    # 3. Soru eki ünlü uyumu düzeltmesi (-mi/-mı/-mu/-mü)
     for i in range(1, len(processed_words)):
         w = processed_words[i].lower()
         if w in {"mi", "mı", "mu", "mü"}:
             prev = processed_words[i - 1]
             processed_words[i] = fix_question_particle(prev, w)
 
-    # 3. Cümle başı büyük harf (Türkçe İ / I kuralı)
+    # 4. Cümle başı büyük harf (Türkçe İ / I kuralı)
     first_word = processed_words[0]
     if first_word.startswith("i"):
         processed_words[0] = "İ" + first_word[1:]
@@ -84,14 +102,14 @@ def fix_sentence(raw_text: str) -> str:
     else:
         processed_words[0] = first_word.capitalize()
 
-    # 4. Soru tespiti
+    # 5. Soru tespiti
     is_question = False
     for word in processed_words:
         if word.lower() in QUESTION_PARTICLES or word.lower() in {"neden", "niçin", "nerede", "kim", "nasıl", "hangi", "kaç"}:
             is_question = True
             break
 
-    # 5. Bağlaçlardan önce otomatik virgül koyma
+    # 6. Bağlaçlardan önce otomatik virgül koyma
     reconstructed: List[str] = []
     for i, word in enumerate(processed_words):
         if i > 0 and word.lower() in CLAUSE_CONNECTORS:
@@ -101,7 +119,7 @@ def fix_sentence(raw_text: str) -> str:
 
     sentence = " ".join(reconstructed)
 
-    # 6. Cümle sonu noktalama
+    # 7. Cümle sonu noktalama
     if not sentence.endswith((".", "?", "!")):
         if is_question:
             sentence += "?"
