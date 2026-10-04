@@ -1,4 +1,4 @@
-# Kişisel Türkçe ve Discord Sözlüğü
+# Kişisel Türkçe, Discord ve Oyun Sözlüğü
 # Buraya arkadaşlarınla sık kullandığın özel lakapları, oyun terimlerini
 # veya bozmasını istemediğin özel kelimeleri alt alta yazabilirsin.
 # Sistem bu kelimeleri otomatik öğrenir ve her zaman en yüksek öncelikle korur.
@@ -27,3 +27,42 @@ billahi
 yav
 he
 heya
+aynen
+çekem
+çekcem
+çekicem
+gelcem
+gidicem
+yapcam
+edicem
+yaparım
+ederim
+ayarla
+ayarlarız
+hallederiz
+yayın
+yayındayım
+yayıncı
+dcde
+dcyi
+dcye
+valo
+lol
+cs
+cs2
+steam
+rust
+gta
+mc
+minecraft
+pre
+nitro
+boost
+afk
+drop
+ping
+lag
+bug
+hile
+macro
+aim
