@@ -1,29 +1,26 @@
 #!/bin/bash
-# Instagram/Tarayıcı ve tüm pencerelerle %100 uyumlu Türkçe otomatik düzeltme
-# Ses efekti ve Akıllı Kısaltma desteği
+# Zen Browser (Firefox tabanlı) ve tüm Wayland pencereleriyle %100 uyumlu Türkçe düzeltici
 
-# 1. Eski panoyu al
-OLD_CLIP=$(wl-paste 2>/dev/null)
+# 1. Zen / Firefox ve web siteleri için panoyu temizle
+echo "" | wl-copy --primary 2>/dev/null
+echo "" | wl-copy 2>/dev/null
 
-# 2. Seçili metni kopyala
-sleep 0.1
-wtype -M ctrl c -m ctrl
-sleep 0.2
+# 2. Tuş bırakma payı ve Ctrl+C (Zen Browser kopyalama garantisi)
+sleep 0.15
+ydotool key 29:1 46:1 46:0 29:0 2>/dev/null || wtype -M ctrl c -m ctrl
+sleep 0.25
 
-# 3. Kopyalanan yeni metni al
-NEW_CLIP=$(wl-paste 2>/dev/null)
-PRIMARY_CLIP=$(wl-paste --primary 2>/dev/null)
-
-if [ -n "$NEW_CLIP" ] && [ "$NEW_CLIP" != "$OLD_CLIP" ]; then
-    TARGET_TEXT="$NEW_CLIP"
-elif [ -n "$PRIMARY_CLIP" ]; then
-    TARGET_TEXT="$PRIMARY_CLIP"
-else
-    TARGET_TEXT="$NEW_CLIP"
+# 3. Kopyalanan metni al (Primary veya Normal Clipboard)
+TARGET_TEXT=$(wl-paste 2>/dev/null)
+if [ -z "$TARGET_TEXT" ]; then
+    TARGET_TEXT=$(wl-paste --primary 2>/dev/null)
 fi
 
+# Baştaki/sondaki boşlukları temizle
+TARGET_TEXT=$(echo "$TARGET_TEXT" | xargs)
+
 if [ -z "$TARGET_TEXT" ]; then
-    notify-send -a "Türkçe Düzeltici" "Uyarı" "Düzeltilecek metin bulunamadı!"
+    notify-send -a "Türkçe Düzeltici" -u low "Uyarı" "Düzeltilecek metin seçilmedi!"
     exit 0
 fi
 
@@ -35,13 +32,11 @@ if [ -n "$FIXED_TEXT" ]; then
     echo -n "$FIXED_TEXT" | wl-copy
     echo -n "$FIXED_TEXT" | wl-copy --primary
     
-    # 6. Yerine yapıştır
+    # 6. Geri yapıştır (Ctrl+V)
     sleep 0.1
-    wtype -M ctrl v -m ctrl
+    ydotool key 29:1 47:1 47:0 29:0 2>/dev/null || wtype -M ctrl v -m ctrl
     
-    # 7. Zarif Ses Efekti (Arka planda çalar, bekletmez)
+    # 7. Ses ve Bildirim
     paplay /usr/share/sounds/freedesktop/stereo/message-new-instant.oga 2>/dev/null &
-    
-    # 8. Bildirim
     notify-send -a "Türkçe Düzeltici" -i edit-paste -t 2000 "Düzeltildi ✨" "$FIXED_TEXT"
 fi
