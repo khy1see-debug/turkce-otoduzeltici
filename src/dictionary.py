@@ -17,6 +17,7 @@ BLOCKED_SHORT_CHUNKS = {
     "gd", "gt", "şl", "®", "ti", "2a", "│", "♦", "aj", "md", "sr", "fb", "tı", "mt", "lü", "ov", "ic", "tu", "tj",
     "h1", "g3", "g4", "dü", "zi", "do", "iğ", "to", "wp", "r2", "hz",
     "sn", "dk", "km", "kg", "tl", "cm", "mm", "vs", "vb",
+    "ticarici", "disarici", "dışarıcı",
     "b", "c", "ç", "d", "e", "f", "g", "ğ", "h", "ı", "i", "j", "k", "l", "m", "n", "p", "r", "s", "ş", "t", "u", "ü", "v", "y", "z"
 }
 

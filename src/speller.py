@@ -1,10 +1,13 @@
 """
 Damerau-Levenshtein tabanlı ve Türkçe karakter destekli Yazım Düzeltici (Speller).
-Harf yer değişimi (transposition) ve aynı harfin çift yazılması (klavye kayması) önceliklidir.
+Harf yer değişimi, harf/hece tekrarı temizliği ve deasciifier ile ultra hızlı çalışır.
 """
 
+import re
 from typing import List, Tuple, Set
+from functools import lru_cache
 from src.dictionary import is_valid_word, get_word_prob
+from src.deasciifier import deasciify_word
 
 TURKISH_ALPHABET = "abcçdefgğhıijklmnoöprsştuüvyz"
 
@@ -17,46 +20,62 @@ def edits1(word: str) -> set:
     inserts = [L + c + R for L, R in splits for c in TURKISH_ALPHABET]
     return set(deletes + transposes + replaces + inserts)
 
-def edits2(word: str) -> set:
-    """İki karakterlik düzenleme mesafesi."""
-    return set(e2 for e1 in edits1(word) for e2 in edits1(e1) if len(e2) >= 2)
-
-def correct_word(word: str, max_distance: int = 2) -> str:
+@lru_cache(maxsize=50000)
+def correct_word(word: str, max_distance: int = 1) -> str:
     """
     Tek bir kelimeyi 1.17M Türkçe kelime arasından en yüksek frekanslı haline düzeltir.
-    Harf yer değişimine (transposition: kanak -> kanka) ve aynı harf tekrarına özel öncelik verir.
+    Hızlı ve optimize: Harf yer değişimi, hece tekrarı ve 1-adım mesafeyi anında çözer.
     """
     word_clean = word.lower()
     
     # 1. Kelime zaten geçerliyse doğrudan dön
+    deasc = deasciify_word(word_clean)
+    if is_valid_word(deasc):
+        return deasc
     if is_valid_word(word_clean):
         return word_clean
 
-    # Öncelikli 1.A: Harf yer değişimi (Transposition) kontrolü: kanak -> kanka
+    # 1.A: Tekrarlayan hece temizliği (örn: cikalalim -> cikalim -> çıkalım)
+    syllable_dedup = re.sub(r'([a-zçğıöşü]{2,3})\1+', r'\1', word_clean)
+    if syllable_dedup != word_clean:
+        d_cand = deasciify_word(syllable_dedup)
+        if is_valid_word(d_cand):
+            return d_cand
+        if is_valid_word(syllable_dedup):
+            return syllable_dedup
+
+    # 1.B: Harf yer değişimi (Transposition) kontrolü: kanak -> kanka
     splits = [(word_clean[:i], word_clean[i:]) for i in range(len(word_clean) + 1)]
     transposes = [L + R[1] + R[0] + R[2:] for L, R in splits if len(R) > 1]
-    trans_valid = [w for w in transposes if is_valid_word(w)]
+    trans_valid = [deasciify_word(w) for w in transposes if is_valid_word(deasciify_word(w)) or is_valid_word(w)]
     if trans_valid:
         return max(trans_valid, key=get_word_prob)
 
-    # Öncelikli 1.B: Tekrar eden/fazla harf silme: gdidiyor -> gidiyor
+    # 1.C: Tekrar eden/fazla harf silme: gdidiyor -> gidiyor
     deletes = [L + R[1:] for L, R in splits if R]
-    del_valid = [w for w in deletes if is_valid_word(w)]
+    del_valid = [deasciify_word(w) for w in deletes if is_valid_word(deasciify_word(w)) or is_valid_word(w)]
     if del_valid:
         return max(del_valid, key=get_word_prob)
 
-    # 1.C: Diğer 1-mesafe adayları
-    candidates1 = [w for w in edits1(word_clean) if is_valid_word(w)]
-    if candidates1:
-        return max(candidates1, key=get_word_prob)
+    # 1.D: Diğer 1-mesafe adayları (deasciifier ile birlikte)
+    cands1 = edits1(word_clean)
+    valid_cands1 = set()
+    for c in cands1:
+        d = deasciify_word(c)
+        if is_valid_word(d):
+            valid_cands1.add(d)
+        elif is_valid_word(c):
+            valid_cands1.add(c)
+    if valid_cands1:
+        return max(valid_cands1, key=get_word_prob)
 
-    if max_distance >= 2:
-        # 2. İki adım mesafedeki adaylar
-        candidates2 = [
-            w for w in edits2(word_clean) 
-            if is_valid_word(w) and abs(len(w) - len(word_clean)) <= 1
-        ]
-        if candidates2:
-            return max(candidates2, key=get_word_prob)
+    # 1.E: Uzun kelimelerde 2-mesafe aramayı gereksiz CPU yükü olmaması için sadece son çare olarak sınırla
+    if max_distance >= 2 and len(word_clean) <= 8:
+        # 2 harf mesafesi
+        for e1 in edits1(word_clean):
+            for e2 in edits1(e1):
+                d = deasciify_word(e2)
+                if is_valid_word(d):
+                    return d
 
     return word_clean
