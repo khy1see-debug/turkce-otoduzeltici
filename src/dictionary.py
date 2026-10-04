@@ -10,6 +10,8 @@ from functools import lru_cache
 from typing import Set
 from wordfreq import word_frequency
 
+from src.loanwords import COMMON_ENGLISH_TERMS
+
 DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "turkish_words_huge.pkl")
 
 # Tek harfli, iki harfli anlamsız kısaltmalar veya segmenter'ı bozan yabancı karakterler
@@ -30,6 +32,8 @@ if os.path.exists(DATA_PATH):
     except Exception as e:
         print(f"Uyarı: Devasa sözlük yüklenirken hata oluştu: {e}")
 
+# İngilizce teknoloji/oyun terimleri ve temel Türkçe kısa kelimeler
+ALL_TURKISH_WORDS.update(COMMON_ENGLISH_TERMS)
 ALL_TURKISH_WORDS.add("o")
 ALL_TURKISH_WORDS.add("su")
 ALL_TURKISH_WORDS.add("ev")
@@ -43,7 +47,9 @@ ALL_TURKISH_WORDS.add("ot")
 HIGH_PRIORITY_COLLOQUIAL = {
     "naber": 0.015, "kanka": 0.020, "selam": 0.018, "merhaba": 0.020, "nasılsın": 0.015,
     "gidiyor": 0.025, "geliyor": 0.025, "gidiyorsun": 0.020, "geliyorsun": 0.020,
-    "nasıl": 0.030, "neden": 0.020, "niye": 0.015, "iyiyim": 0.015, "güzel": 0.020
+    "nasıl": 0.030, "neden": 0.020, "niye": 0.015, "iyiyim": 0.015, "güzel": 0.020,
+    "discord": 0.020, "premium": 0.020, "spotify": 0.018, "instagram": 0.020,
+    "youtube": 0.020, "steam": 0.018, "online": 0.018, "link": 0.020, "chat": 0.018
 }
 
 # Kritik dilbilgisi bağlaç ve soru ekleri taban puanları
