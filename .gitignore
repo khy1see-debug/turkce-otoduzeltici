@@ -11,7 +11,6 @@ dist/
 
 # Ham indirme dosyaları
 data/*.txt
-!data/kisisel_sozluk.txt
 data/*.json
 data/*.pkl
 models/
@@ -21,3 +20,4 @@ models/
 Thumbs.db
 .vscode/
 .idea/
+.codexopt/

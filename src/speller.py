@@ -4,10 +4,10 @@ Harf yer değişimi, harf/hece tekrarı temizliği ve deasciifier ile ultra hız
 """
 
 import re
-from typing import List, Tuple, Set
 from functools import lru_cache
 from src.dictionary import is_valid_word, get_word_prob
 from src.deasciifier import deasciify_word
+from src.turkish_case import turkish_lower
 
 TURKISH_ALPHABET = "abcçdefgğhıijklmnoöprsştuüvyz"
 
@@ -26,7 +26,7 @@ def correct_word(word: str, max_distance: int = 1) -> str:
     Tek bir kelimeyi 1.17M Türkçe kelime arasından en yüksek frekanslı haline düzeltir.
     Hızlı ve optimize: Harf yer değişimi, hece tekrarı ve 1-adım mesafeyi anında çözer.
     """
-    word_clean = word.lower()
+    word_clean = turkish_lower(word)
     
     # 1. Kelime zaten geçerliyse doğrudan dön
     deasc = deasciify_word(word_clean)

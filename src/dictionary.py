@@ -6,11 +6,13 @@ Zemberek çekimleri, TDK resmi sözlüğü ve günlük konuşma dili ağırlıkl
 import os
 import math
 import gzip
+import tempfile
 from functools import lru_cache
 from typing import Set
 from wordfreq import word_frequency
 
 from src.loanwords import COMMON_ENGLISH_TERMS
+from src.turkish_case import turkish_lower
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "turkish_words.txt.gz")
 
@@ -35,27 +37,19 @@ if os.path.exists(DATA_PATH):
 # İngilizce teknoloji/oyun terimleri ve temel Türkçe kısa kelimeler
 ALL_TURKISH_WORDS.update(COMMON_ENGLISH_TERMS)
 
-# Kişisel Sözlük / Discord kelimeleri yükleme
+# Kişisel sözlük, paket kodundan ve çalışma dizininden bağımsız olarak kullanıcıda kalır.
 CONFIG_DIR = os.environ.get(
     "XDG_CONFIG_HOME", os.path.join(os.path.expanduser("~"), ".config")
 )
-PERSONAL_DICT_PATH = os.path.join(CONFIG_DIR, "turkce-otoduzeltici", "kisisel_sozluk.txt")
-REPOSITORY_PERSONAL_DICT_PATH = os.path.join(
+CONFIG_PERSONAL_DICT_PATH = os.path.join(
+    CONFIG_DIR, "turkce-otoduzeltici", "kisisel_sozluk.txt"
+)
+LEGACY_PERSONAL_DICT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "data", "kisisel_sozluk.txt"
 )
-if not os.path.exists(PERSONAL_DICT_PATH):
-    PERSONAL_DICT_PATH = REPOSITORY_PERSONAL_DICT_PATH
+PERSONAL_DICT_PATH = CONFIG_PERSONAL_DICT_PATH
 PERSONAL_WORDS: Set[str] = set()
-if os.path.exists(PERSONAL_DICT_PATH):
-    try:
-        with open(PERSONAL_DICT_PATH, "r", encoding="utf-8") as f:
-            for line in f:
-                w = line.strip().lower()
-                if w and not w.startswith("#"):
-                    PERSONAL_WORDS.add(w)
-                    ALL_TURKISH_WORDS.add(w)
-    except Exception as e:
-        print(f"Kişisel sözlük okuma hatası: {e}")
+_PERSONAL_DICT_SIGNATURE = None
 
 ALL_TURKISH_WORDS.add("o")
 ALL_TURKISH_WORDS.add("su")
@@ -85,15 +79,20 @@ CRITICAL_GRAMMAR_WORDS = {
 
 def is_valid_word(word: str) -> bool:
     """Kelimenin Türkçe sözlükte olup olmadığını O(1) hızla kontrol eder."""
-    w = word.lower()
+    w = turkish_lower(word)
     if w in BLOCKED_SHORT_CHUNKS:
         return False
-    return w in ALL_TURKISH_WORDS or w in CRITICAL_GRAMMAR_WORDS or w in HIGH_PRIORITY_COLLOQUIAL
+    return (
+        w in ALL_TURKISH_WORDS
+        or w in PERSONAL_WORDS
+        or w in CRITICAL_GRAMMAR_WORDS
+        or w in HIGH_PRIORITY_COLLOQUIAL
+    )
 
 @lru_cache(maxsize=100000)
 def get_word_prob(word: str) -> float:
     """Kelimenin log-olasılığını döner."""
-    w = word.lower()
+    w = turkish_lower(word)
     if w in BLOCKED_SHORT_CHUNKS:
         return -50.0
 
@@ -113,3 +112,94 @@ def get_word_prob(word: str) -> float:
         return -12.0 + (len(w) * 0.4)
     
     return -25.0 - (2.0 * len(word))
+
+
+def _resolved_personal_dict_path() -> str:
+    if os.path.isfile(CONFIG_PERSONAL_DICT_PATH):
+        return CONFIG_PERSONAL_DICT_PATH
+    if os.path.isfile(LEGACY_PERSONAL_DICT_PATH):
+        return LEGACY_PERSONAL_DICT_PATH
+    return CONFIG_PERSONAL_DICT_PATH
+
+
+def refresh_personal_dictionary(force: bool = False) -> bool:
+    """Reload user words after file changes, so a running service sees updates."""
+    global PERSONAL_DICT_PATH, _PERSONAL_DICT_SIGNATURE
+
+    path = _resolved_personal_dict_path()
+    try:
+        stat = os.stat(path)
+        signature = (path, stat.st_mtime_ns, stat.st_size)
+    except FileNotFoundError:
+        signature = (path, None, None)
+
+    if not force and signature == _PERSONAL_DICT_SIGNATURE:
+        return False
+
+    words: Set[str] = set()
+    try:
+        with open(path, "r", encoding="utf-8") as dictionary_file:
+            words = {
+                turkish_lower(line.strip())
+                for line in dictionary_file
+                if line.strip() and not line.lstrip().startswith("#")
+            }
+    except FileNotFoundError:
+        pass
+
+    changed = words != PERSONAL_WORDS
+    PERSONAL_WORDS.clear()
+    PERSONAL_WORDS.update(words)
+    PERSONAL_DICT_PATH = path
+    _PERSONAL_DICT_SIGNATURE = signature
+    if changed:
+        get_word_prob.cache_clear()
+    return changed
+
+
+def _write_personal_words(words: Set[str]) -> None:
+    directory = os.path.dirname(CONFIG_PERSONAL_DICT_PATH)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    descriptor, temporary_path = tempfile.mkstemp(
+        prefix=".kisisel_sozluk.", dir=directory, text=True
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as dictionary_file:
+            for word in sorted(words):
+                dictionary_file.write(word + "\n")
+        os.replace(temporary_path, CONFIG_PERSONAL_DICT_PATH)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
+    refresh_personal_dictionary(force=True)
+
+
+def add_personal_word(word: str) -> bool:
+    normalized = turkish_lower(word.strip())
+    if not normalized or any(char.isspace() for char in normalized) or normalized.startswith("#"):
+        raise ValueError("Sözlük girdisi boşluk içermeyen tek bir kelime olmalı.")
+    refresh_personal_dictionary()
+    if normalized in PERSONAL_WORDS:
+        return False
+    _write_personal_words(PERSONAL_WORDS | {normalized})
+    return True
+
+
+def remove_personal_word(word: str) -> bool:
+    normalized = turkish_lower(word.strip())
+    refresh_personal_dictionary()
+    if normalized not in PERSONAL_WORDS:
+        return False
+    _write_personal_words(PERSONAL_WORDS - {normalized})
+    return True
+
+
+def list_personal_words() -> list[str]:
+    refresh_personal_dictionary()
+    return sorted(PERSONAL_WORDS)
+
+
+refresh_personal_dictionary(force=True)

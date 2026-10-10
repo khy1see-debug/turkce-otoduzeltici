@@ -7,6 +7,7 @@ Türkçe Devrik Cümle Düzeltici (Word Order Normalizer).
 
 import re
 from typing import List
+from src.turkish_case import turkish_lower
 
 # Türkçe fiil zaman ve şahıs ekleri regexi
 TENSE_PERSON_PATTERNS = [
@@ -34,7 +35,7 @@ NON_VERBS = {
 
 def is_finite_verb(word: str) -> bool:
     """Kelimenin çekimli bir fiil olup olmadığını tespit eder."""
-    w = word.lower().strip(",.?!")
+    w = turkish_lower(word).strip(",.?!")
     if w in NON_VERBS or len(w) <= 2:
         return False
     return bool(COMBINED_VERB_REGEX.match(w))
@@ -48,7 +49,7 @@ def fix_word_order(tokens: List[str]) -> List[str]:
         return tokens
 
     # Eğer son kelime zaten fiil veya soru eki ise dokunma
-    last_w = tokens[-1].lower()
+    last_w = turkish_lower(tokens[-1])
     if last_w in {"mi", "mı", "mu", "mü"} or is_finite_verb(last_w):
         return tokens
 

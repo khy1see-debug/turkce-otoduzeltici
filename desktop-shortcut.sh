@@ -1,5 +1,32 @@
 #!/bin/bash
-# Zen Browser (Firefox tabanlı) ve tüm Wayland pencereleriyle %100 uyumlu Türkçe düzeltici
+# Wayland seçili metni düzeltip, seçim hâlâ etkin durumdayken aynı yere yapıştırır.
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+# Bash command substitution drops trailing newlines. A sentinel preserves the
+# exact text while still allowing command status checks.
+capture_command_output() {
+    local captured status
+    captured=$("$@" 2>/dev/null; status=$?; printf '\001'; exit "$status")
+    status=$?
+    CAPTURED_OUTPUT=${captured%$'\001'}
+    return "$status"
+}
+
+CORRECTOR_BIN="${TURKCE_DUZELT_BIN:-$(command -v turkce-duzelt-fast || true)}"
+if [ -z "$CORRECTOR_BIN" ] && [ -x "$SCRIPT_DIR/.venv/bin/turkce-duzelt-fast" ]; then
+    CORRECTOR_BIN="$SCRIPT_DIR/.venv/bin/turkce-duzelt-fast"
+fi
+if [ -z "$CORRECTOR_BIN" ]; then
+    CORRECTOR_BIN="$(command -v turkce-duzelt || true)"
+fi
+if [ -z "$CORRECTOR_BIN" ] && [ -x "$SCRIPT_DIR/turkce-duzelt" ]; then
+    CORRECTOR_BIN="$SCRIPT_DIR/turkce-duzelt"
+fi
+if [ -z "$CORRECTOR_BIN" ]; then
+    notify-send -a "Türkçe Düzeltici" -u critical "Hata" "turkce-duzelt komutu bulunamadı. Önce projeyi kurun."
+    exit 1
+fi
 
 # 1. Zen / Firefox ve web siteleri için panoyu temizle
 echo "" | wl-copy --primary 2>/dev/null
@@ -11,40 +38,31 @@ ydotool key 29:1 46:1 46:0 29:0 2>/dev/null || wtype -M ctrl c -m ctrl
 sleep 0.25
 
 # 3. Kopyalanan metni al (Primary veya Normal Clipboard)
-TARGET_TEXT=$(wl-paste 2>/dev/null)
-if [ -z "$TARGET_TEXT" ]; then
-    TARGET_TEXT=$(wl-paste --primary 2>/dev/null)
+if ! capture_command_output wl-paste || [ -z "$CAPTURED_OUTPUT" ]; then
+    capture_command_output wl-paste --primary || true
 fi
+TARGET_TEXT=$CAPTURED_OUTPUT
 
-# Baştaki/sondaki boşlukları temizle
-TARGET_TEXT=$(echo "$TARGET_TEXT" | xargs)
-
-if [ -z "$TARGET_TEXT" ]; then
+# Boşlukları xargs ile yeniden biçimlendirme; seçimin satır ve boşluklarını koru.
+if [ -z "${TARGET_TEXT//[[:space:]]/}" ]; then
     notify-send -a "Türkçe Düzeltici" -u low "Uyarı" "Düzeltilecek metin seçilmedi!"
     exit 0
 fi
 
 # 4. Çevrimdışı düzelticiyi çalıştır
-FIXED_TEXT=$(/home/enes/.local/bin/turkce-duzelt "$TARGET_TEXT")
+if ! capture_command_output "$CORRECTOR_BIN" "$TARGET_TEXT"; then
+    notify-send -a "Türkçe Düzeltici" -u critical "Hata" "Seçili metin düzeltilemedi."
+    exit 1
+fi
+FIXED_TEXT=$CAPTURED_OUTPUT
 
 if [ -n "$FIXED_TEXT" ]; then
-    if ! command -v zenity >/dev/null 2>&1; then
-        notify-send -a "Türkçe Düzeltici" -u normal "Önizleme kullanılamıyor" "Metin değiştirilmedi; güvenli onay için zenity gerekli."
-        exit 1
-    fi
-
-    if ! zenity --question --width=640 \
-        --title="Türkçe Düzeltici — Önizleme" \
-        --ok-label="Düzelt ve yapıştır" --cancel-label="Vazgeç" \
-        --text="Seçili metin:\n\n$TARGET_TEXT\n\nDüzeltilmiş hâli:\n\n$FIXED_TEXT"; then
-        exit 0
-    fi
-
-    # 5. Düzeltilmiş metni panoya yaz
+    # Seçim, önizleme penceresiyle odağı kaybetmesin. Panoya yazıp hemen
+    # Ctrl+V gönderince uygulama mevcut seçimi yeni metinle değiştirir.
     echo -n "$FIXED_TEXT" | wl-copy
     echo -n "$FIXED_TEXT" | wl-copy --primary
-    
-    # 6. Geri yapıştır (Ctrl+V)
+
+    # Geri yapıştır (Ctrl+V), seçili eski metnin üzerine yazar.
     sleep 0.1
     ydotool key 29:1 47:1 47:0 29:0 2>/dev/null || wtype -M ctrl v -m ctrl
     

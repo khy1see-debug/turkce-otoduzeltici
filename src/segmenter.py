@@ -4,10 +4,11 @@ Bitişik yazılmış Türkçe metinleri ayırma modülü (Word Segmentation / Vi
 Kısa anlamsız parçalanmalar (kan + ak) yerine doğru kelimeleri (kanka) önceliklendirir.
 """
 
-from typing import List, Tuple
+from typing import List
 from src.dictionary import is_valid_word, get_word_prob, CRITICAL_GRAMMAR_WORDS
 from src.speller import correct_word
 from src.deasciifier import deasciify_word
+from src.turkish_case import turkish_lower
 
 MAX_WORD_LEN = 22
 
@@ -16,7 +17,7 @@ def segment_text(text: str) -> List[str]:
     Dinamik programlama (Viterbi) ile bitişik yazılmış metni kelimelere ayırır ve düzeltir.
     Kısa bağlaçlar ve soru ekleri (de, da, mi, mı) korunurken, anlamsız 2 harfli bölmeler cezalandırılır.
     """
-    clean_text = text.lower().strip()
+    clean_text = turkish_lower(text).strip()
     n = len(clean_text)
     if n == 0:
         return []

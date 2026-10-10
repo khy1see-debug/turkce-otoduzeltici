@@ -1,8 +1,9 @@
-"""
-Türkçe Büyük ve Küçük Ünlü Uyumu (Vowel Harmony) ve Ek Türetici.
+"""Türkçe Büyük ve Küçük Ünlü Uyumu (Vowel Harmony) ve Ek Türetici.
 - Soru ekleri (-mi, -mı, -mu, -mü)
 - İyelik ve Tamlayan ekleri (-in, -ın, -un, -ün / 'in, 'ın vb.)
 """
+
+from src.turkish_case import turkish_lower
 
 FRONT_UNROUNDED = {'e', 'i'}     # -> mi, in
 BACK_UNROUNDED = {'a', 'ı'}      # -> mı, ın
@@ -13,7 +14,7 @@ ALL_VOWELS = set("aeıioöuü")
 
 def get_last_vowel(word: str) -> str:
     """Kelimenin son ünlüsünü döner."""
-    for ch in reversed(word.lower()):
+    for ch in reversed(turkish_lower(word)):
         if ch in ALL_VOWELS:
             return ch
     return 'e'
@@ -22,7 +23,7 @@ def get_genitive_suffix(word: str) -> str:
     """Kelimenin son ünlüsüne göre tamlayan ekini döner ('in, 'ın, 'un, 'ün)."""
     last_v = get_last_vowel(word)
     # Eğer kelime ünlü ile bitiyorsa kaynaştırma harfi 'n' gelir ('nin, 'nın vb.)
-    ends_with_vowel = word[-1].lower() in ALL_VOWELS if word else False
+    ends_with_vowel = turkish_lower(word[-1]) in ALL_VOWELS if word else False
     
     if last_v in FRONT_UNROUNDED:
         return "'nin" if ends_with_vowel else "'in"
@@ -42,7 +43,7 @@ def fix_question_particle(prev_word: str, particle: str) -> str:
     oldu -> oldu mu
     gördün -> gördün mü
     """
-    p = particle.lower()
+    p = turkish_lower(particle)
     if p not in {"mi", "mı", "mu", "mü"}:
         return particle
 

@@ -5,7 +5,6 @@ Noktalama, harf hataları, devrik cümleler ve bağlaçları mükemmel seviyede 
 """
 
 import os
-import sys
 from typing import Optional
 
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "qwen2.5-0.5b-instruct-q4_k_m.gguf")

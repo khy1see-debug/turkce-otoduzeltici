@@ -1,0 +1,67 @@
+version: 1
+targets:
+  agents_files:
+  - AGENTS.md
+  - '**/AGENTS.md'
+  - '**/AGENTS.override.md'
+  skills_globs:
+  - .codex/skills/**/SKILL.md
+  - '**/.codex/skills/**/SKILL.md'
+  - .agents/skills/**/SKILL.md
+  - '**/.agents/skills/**/SKILL.md'
+exclude_globs:
+- .git/**
+- .codexopt/**
+- .venv/**
+- venv/**
+- env/**
+- node_modules/**
+- build/**
+- dist/**
+- '*.egg-info/**'
+- '**/__pycache__/**'
+- .pytest_cache/**
+- .mypy_cache/**
+- .ruff_cache/**
+- .tox/**
+- .nox/**
+- coverage/**
+- htmlcov/**
+- models/**
+- '*.log'
+- '.env'
+- '.env.*'
+- '**/.env'
+- '**/.env.*'
+- '**/*secret*'
+- '**/*token*'
+- '**/*.pem'
+- '**/*.key'
+- '**/credentials.json'
+- '**/secrets.json'
+- '**/token.json'
+- reference/**
+output:
+  root_dir: .codexopt
+evidence:
+  task_files: []
+  issue_files: []
+optimization:
+  engine: heuristic
+  min_apply_delta: 0.01
+  max_metric_calls: 60
+  reflection_model: null
+  skillopt_train_ratio: 0.67
+  skillopt_edit_budget: 24
+  skillopt_validation_delta: 0.01
+reflective:
+  optimizer_model: codex
+  judge_model: null
+  reward_mode: static
+  minibatch_size: 3
+  max_iterations: 6
+  edit_budget: 12
+  valset_ratio: 0.34
+  max_rollouts: 0
+  seed: 0
+  codex_binary: codex

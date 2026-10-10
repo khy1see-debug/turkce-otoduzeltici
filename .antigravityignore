@@ -1,10 +1,17 @@
 # Builds & Caches
+.git/
+.codexopt/
 dist/
 build/
 out/
 .cache/
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
 .next/
 .nuxt/
 .vite/
@@ -17,6 +24,8 @@ vendor/
 .venv/
 venv/
 env/
+*.egg-info/
+models/
 
 # Test Artifacts & Coverage
 coverage/

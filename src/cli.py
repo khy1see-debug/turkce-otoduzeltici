@@ -8,7 +8,6 @@ Kullanım:
 
 import sys
 import argparse
-from src.grammar import fix_sentence
 
 def main():
     parser = argparse.ArgumentParser(
@@ -25,8 +24,41 @@ def main():
         action="store_true",
         help="İnteraktif canlı terminal modu"
     )
+    dictionary_actions = parser.add_mutually_exclusive_group()
+    dictionary_actions.add_argument(
+        "--add-word", metavar="KELİME", help="Kelimeyi kişisel sözlüğe ekle"
+    )
+    dictionary_actions.add_argument(
+        "--remove-word", metavar="KELİME", help="Kelimeyi kişisel sözlükten kaldır"
+    )
+    dictionary_actions.add_argument(
+        "--list-words", action="store_true", help="Kişisel sözlükteki kelimeleri göster"
+    )
 
     args = parser.parse_args()
+    if args.add_word or args.remove_word or args.list_words:
+        from src.dictionary import (
+            add_personal_word,
+            list_personal_words,
+            remove_personal_word,
+        )
+
+        if args.add_word:
+            try:
+                changed = add_personal_word(args.add_word)
+            except ValueError as exc:
+                parser.error(str(exc))
+            print("Kelime sözlüğe eklendi." if changed else "Kelime zaten sözlükte.")
+        elif args.remove_word:
+            changed = remove_personal_word(args.remove_word)
+            print("Kelime sözlükten kaldırıldı." if changed else "Kelime sözlükte yok.")
+        else:
+            print("\n".join(list_personal_words()))
+        return 0
+
+    # Import correction data only after parsing. This keeps --help and invalid
+    # command-line invocations from decompressing/loading the large dictionary.
+    from src.grammar import fix_sentence
 
     if args.interactive or not args.text:
         print("=" * 60)

@@ -25,8 +25,33 @@ uv tool install .
 ```
 
 Alternatif olarak sanal ortamda `python -m pip install .` kullanabilirsiniz.
-Kişisel kelimelerinizi `~/.config/turkce-otoduzeltici/kisisel_sozluk.txt`
-dosyasına her satıra bir kelime gelecek şekilde ekleyin. Bu dosya yerel kalır.
+Kişisel kelimeler `~/.config/turkce-otoduzeltici/kisisel_sozluk.txt` içinde yerel
+kalır. Eklemek, silmek ve listelemek için:
+
+```bash
+turkce-duzelt --add-word Minecraft
+turkce-duzelt --remove-word Minecraft
+turkce-duzelt --list-words
+```
+
+Arka plan servisi dosya değişikliğini bir sonraki düzeltmede algılar; servisi
+yeniden başlatmak gerekmez.
+
+Wayland kısayolunu sık kullanıyorsanız sözlüğü oturum boyunca bellekte tutan
+kullanıcı servisini kurabilirsiniz:
+
+```bash
+bash install-user-service.sh
+```
+
+Servis sözlüğü bir kez yükler; `desktop-shortcut.sh` hızlı istemciyi bulursa
+bu servise bağlanır. Servis kapalıysa istemci başlatmayı dener. Servis kurulu
+değilse normal düzelticiye geri döner. Servisi yönetmek için:
+
+```bash
+systemctl --user status turkce-otoduzeltici.service
+systemctl --user disable --now turkce-otoduzeltici.service
+```
 
 ### 2. Kullanım
 
@@ -57,6 +82,19 @@ Kurulumdan sonra Python'dan içe aktarım için aynı `src.grammar` modülünü 
 ---
 
 ## 🧪 Testler
+
+Geliştirme bağımlılıklarını kilit dosyasındaki sürümlerle kurmak için:
+
 ```bash
-PYTHONPATH=. pytest tests/
+uv sync --locked --extra dev
 ```
+
+Testleri ve temel statik kontrolü çalıştırmak için:
+
+```bash
+.venv/bin/pytest -q
+.venv/bin/ruff check src tests
+```
+
+GitHub Actions, her push ve pull request'te testleri Python 3.10, 3.12 ve
+3.14 üzerinde çalıştırır.

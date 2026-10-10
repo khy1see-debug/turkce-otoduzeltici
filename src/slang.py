@@ -1,9 +1,9 @@
-"""
-Türkçe Chat Kısaltmaları ve Günlük Konuşma Genişletici (Slang Expander).
+"""Türkçe Chat Kısaltmaları ve Günlük Konuşma Genişletici (Slang Expander).
 Discord, Instagram, WhatsApp ve oyun sohbetlerinde sıkça geçen kısaltmaları ve
 ağız/günlük konuşma kalıplarını standart Türkçeye dönüştürür.
 """
 
+from src.turkish_case import turkish_lower
 from typing import Optional
 
 CHAT_SLANG_MAP = {
@@ -24,10 +24,14 @@ CHAT_SLANG_MAP = {
     "iyiki": "iyi ki",
     "hersey": "her şey",
     "herşey": "her şey",
+    "herkez": "herkes",
     "herkes": "herkes",
     "bişey": "bir şey",
     "bisey": "bir şey",
     "birsey": "bir şey",
+    "birşey": "bir şey",
+    "hiçbirşey": "hiçbir şey",
+    "hicbirsey": "hiçbir şey",
     "bisi": "bir şey",
     "bişi": "bir şey",
     "hicbi": "hiçbir",
@@ -145,6 +149,12 @@ CHAT_SLANG_MAP = {
     "gelcenmi": "gelecek misin",
     "geliyonmu": "geliyor musun",
     "gidiyonmu": "gidiyor musun",
+    "geliyomusun": "geliyor musun",
+    "gidiyomusun": "gidiyor musun",
+    "geliyormusun": "geliyor musun",
+    "gidiyormusun": "gidiyor musun",
+    "iyimisin": "iyi misin",
+    "iyimisiniz": "iyi misiniz",
     "yapiyonmu": "yapıyor musun",
     "yapıyonmu": "yapıyor musun",
     "girekmi": "girelim mi",
@@ -190,6 +200,12 @@ CHAT_SLANG_MAP = {
     "gorusuruz": "görüşürüz",
     "geliyom": "geliyorum",
     "gidiyom": "gidiyorum",
+    "geliyo": "geliyor",
+    "gidiyo": "gidiyor",
+    "yapıyo": "yapıyor",
+    "yapiyo": "yapıyor",
+    "oluyo": "oluyor",
+    "biliyo": "biliyor",
     "bakiom": "bakıyorum",
     "bakıyom": "bakıyorum",
     "bekliom": "bekliyorum",
@@ -213,4 +229,4 @@ CHAT_SLANG_MAP = {
 
 def expand_slang(token: str) -> Optional[str]:
     """Kısaltma veya chat argo kelimesini tam Türkçe karşılığına açar."""
-    return CHAT_SLANG_MAP.get(token.lower())
+    return CHAT_SLANG_MAP.get(turkish_lower(token))
