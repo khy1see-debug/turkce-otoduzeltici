@@ -5,14 +5,14 @@ Zemberek çekimleri, TDK resmi sözlüğü ve günlük konuşma dili ağırlıkl
 
 import os
 import math
-import pickle
+import gzip
 from functools import lru_cache
 from typing import Set
 from wordfreq import word_frequency
 
 from src.loanwords import COMMON_ENGLISH_TERMS
 
-DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "turkish_words_huge.pkl")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "turkish_words.txt.gz")
 
 # Tek harfli, iki harfli anlamsız kısaltmalar veya segmenter'ı bozan yabancı karakterler
 BLOCKED_SHORT_CHUNKS = {
@@ -27,8 +27,8 @@ ALL_TURKISH_WORDS: Set[str] = set()
 
 if os.path.exists(DATA_PATH):
     try:
-        with open(DATA_PATH, "rb") as f:
-            ALL_TURKISH_WORDS = pickle.load(f) - BLOCKED_SHORT_CHUNKS
+        with gzip.open(DATA_PATH, "rt", encoding="utf-8") as f:
+            ALL_TURKISH_WORDS = {line.rstrip("\n") for line in f if line.strip()} - BLOCKED_SHORT_CHUNKS
     except Exception as e:
         print(f"Uyarı: Devasa sözlük yüklenirken hata oluştu: {e}")
 
@@ -36,7 +36,15 @@ if os.path.exists(DATA_PATH):
 ALL_TURKISH_WORDS.update(COMMON_ENGLISH_TERMS)
 
 # Kişisel Sözlük / Discord kelimeleri yükleme
-PERSONAL_DICT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "kisisel_sozluk.txt")
+CONFIG_DIR = os.environ.get(
+    "XDG_CONFIG_HOME", os.path.join(os.path.expanduser("~"), ".config")
+)
+PERSONAL_DICT_PATH = os.path.join(CONFIG_DIR, "turkce-otoduzeltici", "kisisel_sozluk.txt")
+REPOSITORY_PERSONAL_DICT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "data", "kisisel_sozluk.txt"
+)
+if not os.path.exists(PERSONAL_DICT_PATH):
+    PERSONAL_DICT_PATH = REPOSITORY_PERSONAL_DICT_PATH
 PERSONAL_WORDS: Set[str] = set()
 if os.path.exists(PERSONAL_DICT_PATH):
     try:

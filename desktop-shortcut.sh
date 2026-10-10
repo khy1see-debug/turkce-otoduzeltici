@@ -28,6 +28,18 @@ fi
 FIXED_TEXT=$(/home/enes/.local/bin/turkce-duzelt "$TARGET_TEXT")
 
 if [ -n "$FIXED_TEXT" ]; then
+    if ! command -v zenity >/dev/null 2>&1; then
+        notify-send -a "Türkçe Düzeltici" -u normal "Önizleme kullanılamıyor" "Metin değiştirilmedi; güvenli onay için zenity gerekli."
+        exit 1
+    fi
+
+    if ! zenity --question --width=640 \
+        --title="Türkçe Düzeltici — Önizleme" \
+        --ok-label="Düzelt ve yapıştır" --cancel-label="Vazgeç" \
+        --text="Seçili metin:\n\n$TARGET_TEXT\n\nDüzeltilmiş hâli:\n\n$FIXED_TEXT"; then
+        exit 0
+    fi
+
     # 5. Düzeltilmiş metni panoya yaz
     echo -n "$FIXED_TEXT" | wl-copy
     echo -n "$FIXED_TEXT" | wl-copy --primary

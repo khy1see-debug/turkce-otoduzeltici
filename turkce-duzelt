@@ -1,3 +1,6 @@
-#!/bin/bash
-# Çevrimdışı Türkçe Otomatik Düzeltici Global Başlatıcı
-PYTHONPATH=/home/enes/antigravity/optimistic-kepler /home/enes/antigravity/optimistic-kepler/.venv/bin/python -m src.cli "$@"
+#!/usr/bin/env bash
+# Çevrimdışı Türkçe Otomatik Düzeltici başlatıcısı
+SOURCE_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT_DIR="$(cd -- "$(dirname -- "$SOURCE_PATH")" && pwd)"
+export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+exec "$ROOT_DIR/.venv/bin/python" -m src.cli "$@"

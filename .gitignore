@@ -5,11 +5,15 @@ __pycache__/
 .venv/
 venv/
 env/
+build/
+dist/
+*.egg-info/
 
-# Ham İndirme Dosyaları (sadece işlenmiş pkl kalır)
+# Ham indirme dosyaları
 data/*.txt
 !data/kisisel_sozluk.txt
 data/*.json
+data/*.pkl
 models/
 
 # OS / IDE

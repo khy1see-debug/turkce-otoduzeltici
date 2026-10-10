@@ -20,13 +20,13 @@ Bitişik yazılan (örn: `sendemigeliyorusn`), imla ve harf hataları barındır
 
 ### 1. Kurulum
 ```bash
-# Sanal ortam oluşturup aktifleştirin
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Test araçlarını yükleyin (isteğe bağlı)
-pip install pytest
+# uv ile kullanıcı hesabına komut olarak kurun
+uv tool install .
 ```
+
+Alternatif olarak sanal ortamda `python -m pip install .` kullanabilirsiniz.
+Kişisel kelimelerinizi `~/.config/turkce-otoduzeltici/kisisel_sozluk.txt`
+dosyasına her satıra bir kelime gelecek şekilde ekleyin. Bu dosya yerel kalır.
 
 ### 2. Kullanım
 
@@ -51,6 +51,8 @@ print(fix_sentence("sendemigeliyorusn"))
 print(fix_sentence("bugunhavacokguzel"))
 # Çıktı: "Bugün hava çok güzel."
 ```
+
+Kurulumdan sonra Python'dan içe aktarım için aynı `src.grammar` modülünü kullanın.
 
 ---
 
