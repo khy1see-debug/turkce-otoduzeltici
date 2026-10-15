@@ -4,6 +4,7 @@ Zemberek çekimleri, TDK resmi sözlüğü ve günlük konuşma dili ağırlıkl
 """
 
 import os
+import sys
 import math
 import gzip
 import tempfile
@@ -14,7 +15,30 @@ from wordfreq import word_frequency
 from src.loanwords import COMMON_ENGLISH_TERMS
 from src.turkish_case import turkish_lower
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "turkish_words.txt.gz")
+
+def _resolve_data_path() -> str:
+    """Sözlük veri dosyasını hem normal Python hem de PyInstaller paketinde bul."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        for rel in [
+            ("src", "data", "turkish_words.txt.gz"),
+            ("data", "turkish_words.txt.gz"),
+        ]:
+            p = os.path.join(sys._MEIPASS, *rel)
+            if os.path.exists(p):
+                return p
+
+    for candidate in [
+        os.path.join(os.path.dirname(__file__), "data", "turkish_words.txt.gz"),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "turkish_words.txt.gz"),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "src", "data", "turkish_words.txt.gz"),
+    ]:
+        if os.path.exists(candidate):
+            return candidate
+
+    return os.path.join(os.path.dirname(__file__), "data", "turkish_words.txt.gz")
+
+
+DATA_PATH = _resolve_data_path()
 
 # Tek harfli, iki harfli anlamsız kısaltmalar veya segmenter'ı bozan yabancı karakterler
 BLOCKED_SHORT_CHUNKS = {

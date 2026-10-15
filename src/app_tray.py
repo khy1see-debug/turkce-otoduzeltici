@@ -285,6 +285,7 @@ def main():
 
     tray_icon = SystemTrayApp()
     tray_icon.show()
+    tray_icon.show_settings_window()
 
     _notification_manager.show_notification(
         "🇹🇷 Türkçe Otomatik Düzeltici",

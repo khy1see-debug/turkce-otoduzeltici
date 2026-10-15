@@ -529,7 +529,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         function updateStats() {
             const text = document.getElementById('inputText').value;
             const chars = text.length;
-            const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+            const words = text.trim() ? text.trim().split(/\\s+/).length : 0;
             document.getElementById('inputStats').innerText = `${chars} karakter | ${words} kelime`;
         }
 
