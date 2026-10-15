@@ -1,22 +1,25 @@
 """
-Türkçe Dilbilgisi, Ek Ayrımı, Noktalama ve İki Aşamalı Düzeltici.
+Türkçe Dilbilgisi, Ek Ayrımı, Noktalama, Kod Koruması ve Kural Açıklamalı Akıllı Motor.
 Hibrit Mimari:
-1. Chat Kısaltmaları & TDK Yaygın Hatalar (slm -> selam, knk -> kanka, herkez -> herkes, iyiki -> iyi ki)
-2. Harf Uzatması Temizleyici (geliyoruuuum -> geliyorum, çoooook -> çok)
-3. De-asciifier + Segmenter + Speller (Bitişik kelimeleri, harf hatalarını ve Türkçe karakterleri çözer)
-4. Bağlaç & Soru Eki Ayrımı (sendemigeliyorusn -> Sen de mi geliyorsun?, geliyormusun -> Geliyor musun?)
-5. Büyük ve Küçük Ünlü Uyumu Motoru (değil mi, oldu mu, bakar mısınız)
-6. TDK Noktalama & İmla Standartları (Büyük harf, soru işareti, bağlaç kuralları)
+1. Markdown ve Kod Blokları Koruması (```...``` ve `...` bloklarına dokunulmaz)
+2. Chat Kısaltmaları & TDK Yaygın Hatalar (slm -> selam, knk -> kanka, herkez -> herkes, iyiki -> iyi ki)
+3. Harf Uzatması Temizleyici (geliyoruuuum -> geliyorum, çoooook -> çok)
+4. De-asciifier + Segmenter + Speller (Bitişik kelimeleri, harf hatalarını ve Türkçe karakterleri çözer)
+5. Bağlaç & Soru Eki Ayrımı (sendemigeliyorusn -> Sen de mi geliyorsun?, geliyormusun -> Geliyor musun?)
+6. Büyük ve Küçük Ünlü Uyumu Motoru (değil mi, oldu mu, bakar mısınız)
+7. TDK Noktalama & İmla Standartları (Büyük harf, soru işareti, bağlaç kuralları)
+8. Ayrıntılı Kural Açıklamaları (LanguageTool / Grammarly tarzı açıklama ve analiz)
 """
 
 import re
-from typing import List
+import time
+from typing import List, Dict, Any, Tuple
 from src.segmenter import segment_text
 from src.speller import correct_word
 from src.dictionary import refresh_personal_dictionary
 from src.deasciifier import deasciify_word
 from src.harmony import fix_question_particle, get_genitive_suffix
-from src.slang import expand_slang, normalize_elongation
+from src.slang import expand_slang, normalize_elongation, TDK_COMMON_MISSPELLINGS
 from src.syntax import fix_word_order
 from src.turkish_case import turkish_lower, turkish_upper, turkish_capitalize
 
@@ -31,21 +34,17 @@ QUESTION_PARTICLES = {
     "midir", "mıdır", "mudur", "müdür",
 }
 
-# Verbe bitişik yazılan soru eklerini yakalama regexi
-# Örn: geliyormusun -> geliyor + musun, gordunmu -> gördün + mü
 ATTACHED_QUESTION_REGEX = re.compile(
     r"^([a-zçğıöşü]{3,})(m[ıiuü](?:sin|sınız|siniz|sun|sunuz|sün|sünüz|yız|yiz|yuz|yüz|yım|yim|yum|yüm|di|dı|du|dü|miş|mış|muş|müş)?)$",
     re.IGNORECASE
 )
 
-# Soru eki zannedilmemesi gereken isim/kökler
 QUESTION_FALSE_POSITIVES = {
     "kamu", "cami", "semi", "namu", "samu", "timu", "armi", "humi", "rumi"
 }
 
-# Bu belirteçler internet adresi, e-posta veya korunan etiketlerdir
 PROTECTED_TOKEN = re.compile(
-    r"(?:https?://\S+|www\.\S+|[\w.+-]+@[\w.-]+\.\w+|[@#][\wçğıöşüÇĞİÖŞÜ_]+)",
+    r"(?:https?://\S+|www\.\S+|[\w.+-]+@[\w.-]+\.\w+|[@#][\wçğıöşüÇĞİÖŞÜ_]+|__CODE_BLOCK_\d+__)",
     re.IGNORECASE,
 )
 PROTECTED_EMOTICONS = {":)", ":-)", ":(", ":-(", ":D", ":-D", ";)", ";-)", "<3", ":P", ":-P", ":3"}
@@ -55,50 +54,69 @@ PROTECTED_ABBREVIATIONS = {
     "vs", "vb",
 }
 
-# Sık kullanılan 3. tekil iyelik eki almış isimler (tamlayan gerektiren durumlar)
 POSSESSIVE_NOUNS = {
     "yetkisi", "arabası", "telefonu", "evi", "parası", "fikri", "hakkı",
     "işi", "çocuğu", "annesi", "babası", "kardeşi", "arkadaşı", "hatası", "suçu"
 }
 
 
-def fix_sentence(raw_text: str) -> str:
+def _extract_code_blocks(text: str) -> Tuple[str, List[str]]:
+    """Markdown kod bloklarını ve inline kodları koruma altına alır."""
+    blocks: List[str] = []
+    def repl(m: re.Match) -> str:
+        idx = len(blocks)
+        blocks.append(m.group(0))
+        return f"__CODE_BLOCK_{idx}__"
+
+    masked = re.sub(r"(```[\s\S]*?```|`[^`\n]+`)", repl, text)
+    return masked, blocks
+
+
+def _restore_code_blocks(text: str, blocks: List[str]) -> str:
+    """Koruma altına alınan kod bloklarını geri yükler."""
+    for idx, block in enumerate(blocks):
+        text = text.replace(f"__CODE_BLOCK_{idx}__", block)
+    return text
+
+
+def analyze_sentence(raw_text: str) -> Dict[str, Any]:
     """
-    Kullanıcının girdiği ham metni alır:
-    1. Chat kısaltmalarını ve TDK hatalarını açar (slm -> selam, herkez -> herkes, tşk -> teşekkürler).
-    2. Aşırı harf uzatmalarını temizler (geliyoruuuum -> geliyorum, çoooook -> çok).
-    3. Bitişik yazılmış kelimeleri ayırır (sendemigeliyorusn -> sen de mi geliyorsun).
-    4. Türkçe harfleri deasciifier ile tamamlar (ogrenci -> öğrenci, agac -> ağaç).
-    5. Harf hatalarını 1.17M Türkçe sözlükle düzeltir.
-    6. Bitişik soru eklerini ayırır (geliyormusun -> geliyor musun).
-    7. Soru eklerini ünlü uyumuna göre hizalar (değil mi, oldu mu, bakar mısınız).
-    8. Cümle başı büyük harf yapar (Türkçe İ / I kurallarıyla).
-    9. Cümle içi ve sonu noktalama işaretlerini akıllıca yerleştirir.
+    Metni analiz eder, düzeltir ve her bir düzeltmenin nedenini (TDK kuralı, bağlaç,
+    deasciifier vb.) detaylı bir liste halinde döner.
     """
+    t0 = time.time()
     if not raw_text.strip():
-        return ""
+        return {
+            "original": raw_text,
+            "corrected": "",
+            "changes": [],
+            "stats": {"word_count": 0, "char_count": 0, "changes_count": 0, "time_ms": 0.0}
+        }
+
+    # 1. Kod bloklarını maskele
+    masked_text, code_blocks = _extract_code_blocks(raw_text)
 
     if refresh_personal_dictionary():
         correct_word.cache_clear()
 
-    original_text = raw_text
-    leading_length = len(raw_text) - len(raw_text.lstrip())
-    trailing_length = len(raw_text) - len(raw_text.rstrip())
-    leading = re.sub(r" {2,}", " ", raw_text[:leading_length])
+    original_text = masked_text
+    leading_length = len(masked_text) - len(masked_text.lstrip())
+    trailing_length = len(masked_text) - len(masked_text.rstrip())
+    leading = re.sub(r" {2,}", " ", masked_text[:leading_length])
     trailing = (
-        re.sub(r" {2,}", " ", raw_text[len(raw_text) - trailing_length:])
+        re.sub(r" {2,}", " ", masked_text[len(masked_text) - trailing_length:])
         if trailing_length else ""
     )
-    content_end = len(raw_text) - trailing_length if trailing_length else len(raw_text)
-    raw_text = raw_text[leading_length:content_end]
+    content_end = len(masked_text) - trailing_length if trailing_length else len(masked_text)
+    masked_text = masked_text[leading_length:content_end]
 
-    token_matches = list(re.finditer(r"\S+", raw_text))
+    token_matches = list(re.finditer(r"\S+", masked_text))
     tokens = [match.group(0) for match in token_matches]
     spaces_before = [
         re.sub(
             r" {2,}",
             " ",
-            raw_text[token_matches[i - 1].end() if i else 0:match.start()],
+            masked_text[token_matches[i - 1].end() if i else 0:match.start()],
         )
         for i, match in enumerate(token_matches)
     ]
@@ -106,8 +124,17 @@ def fix_sentence(raw_text: str) -> str:
     punctuation_after: List[str] = []
     punctuation_before: List[str] = []
     whitespace_before: List[str] = []
+    changes: List[Dict[str, str]] = []
 
     for token_index, token in enumerate(tokens):
+        # Kod bloğu yer tutucusu ise doğrudan koru
+        if "__CODE_BLOCK_" in token:
+            processed_words.append(token)
+            punctuation_after.append("")
+            punctuation_before.append("")
+            whitespace_before.append(spaces_before[token_index])
+            continue
+
         clean_token = turkish_lower(re.sub(r'[^\wçğıöşüÇĞİÖŞÜ]', '', token))
         if not clean_token:
             if token in PROTECTED_EMOTICONS or re.search(r"[^\w\s.,!?;:…()\[\]{}\"'“”‘’«»]", token):
@@ -146,12 +173,27 @@ def fix_sentence(raw_text: str) -> str:
             whitespace_before.append(spaces_before[token_index])
             continue
 
-        # 0. Aşama: Harf uzatması normalizasyonu (örn: geliyoruuuum -> geliyorum, çoooook -> çok)
-        clean_token = normalize_elongation(clean_token)
+        # 0. Harf uzatması normalizasyonu (örn: geliyoruuuum -> geliyorum)
+        normalized_elong = normalize_elongation(clean_token)
+        if normalized_elong != clean_token:
+            changes.append({
+                "original": clean_token,
+                "corrected": normalized_elong,
+                "rule": "Harf Uzatması: Aşırı tekrar eden harfler standart Türkçeye indirgendi.",
+                "type": "elongation"
+            })
+            clean_token = normalized_elong
 
-        # 1. Aşama: Chat Kısaltması ve TDK Yaygın Hatalar Kontrolü (slm -> selam, herkez -> herkes)
+        # 1. Chat Kısaltması ve TDK Yaygın Hatalar Kontrolü
         slang_expanded = expand_slang(clean_token)
         if slang_expanded:
+            rule_text = "TDK Yazım Kuralı: Yaygın yazım hatası düzeltildi." if clean_token in TDK_COMMON_MISSPELLINGS else "Chat Kısaltması: Günlük konuşma kısaltması standart Türkçeye açıldı."
+            changes.append({
+                "original": token_core,
+                "corrected": slang_expanded,
+                "rule": rule_text,
+                "type": "slang_or_tdk"
+            })
             expanded_words = slang_expanded.split()
             processed_words.extend(expanded_words)
             punctuation_before.extend([""] * len(expanded_words))
@@ -163,14 +205,19 @@ def fix_sentence(raw_text: str) -> str:
                 punctuation_before[len(processed_words) - len(expanded_words)] = prefix
             continue
 
-        # 1.5. Bitişik soru eki ayrımı kontrolü (geliyormusun -> geliyor musun, bakar mısın)
+        # 1.5. Bitişik soru eki ayrımı (geliyormusun -> geliyor musun)
         attached_match = ATTACHED_QUESTION_REGEX.match(clean_token)
         if attached_match and clean_token not in QUESTION_FALSE_POSITIVES:
             stem, q_particle = attached_match.group(1), attached_match.group(2)
-            # Kök deasciify ve speller'dan geçsin
             stem_fixed = correct_word(deasciify_word(stem))
             q_fixed = fix_question_particle(stem_fixed, q_particle)
             q_words = [stem_fixed, q_fixed]
+            changes.append({
+                "original": token_core,
+                "corrected": f"{stem_fixed} {q_fixed}",
+                "rule": "TDK Soru Eki Kuralı: Soru eki olan '-mi' daima kendinden önceki sözcükten ayrı yazılır.",
+                "type": "question_suffix"
+            })
             processed_words.extend(q_words)
             punctuation_before.extend([""] * len(q_words))
             punctuation_after.extend(["", suffix])
@@ -179,15 +226,37 @@ def fix_sentence(raw_text: str) -> str:
                 punctuation_before[len(processed_words) - 2] = prefix
             continue
 
-        # 2. Aşama: Segmenter veya tek kelime düzeltici
+        # 2. Segmenter veya tek kelime düzeltici
         if len(clean_token) > 4:
             segmented = segment_text(clean_token)
+            if len(segmented) > 1:
+                changes.append({
+                    "original": token_core,
+                    "corrected": " ".join(segmented),
+                    "rule": "Bitişik Kelime Ayrımı: Bitişik yazılmış sözcükler sözlük ve frekans tablosuyla ayrıldı.",
+                    "type": "segmentation"
+                })
+            elif segmented and segmented[0] != clean_token:
+                changes.append({
+                    "original": token_core,
+                    "corrected": segmented[0],
+                    "rule": "İmla Düzeltme: Harf hatası ve Türkçe karakterler düzeltildi.",
+                    "type": "spelling"
+                })
             processed_words.extend(segmented)
         else:
             deasc = deasciify_word(clean_token)
             corrected = correct_word(deasc)
+            if corrected != clean_token:
+                changes.append({
+                    "original": token_core,
+                    "corrected": corrected,
+                    "rule": "İmla & De-asciifier: Doğru Türkçe harfler tamamlandı.",
+                    "type": "spelling"
+                })
             processed_words.append(corrected)
             segmented = [corrected]
+
         punctuation_before.extend([""] * len(segmented))
         punctuation_after.extend([""] * (len(segmented) - 1) + [suffix])
         whitespace_before.extend(
@@ -197,48 +266,38 @@ def fix_sentence(raw_text: str) -> str:
             punctuation_before[len(processed_words) - len(segmented)] = prefix
 
     if not processed_words:
-        return original_text
+        return {
+            "original": raw_text,
+            "corrected": _restore_code_blocks(original_text, code_blocks),
+            "changes": [],
+            "stats": {"word_count": 0, "char_count": 0, "changes_count": 0, "time_ms": 0.0}
+        }
 
     # -de / -da bağlacı ayrımı:
-    # TDK: Kişi zamirlerinde ve belirli bağlaçlarda "de/da" daima ayrı yazılır
     final_tokens: List[str] = []
     final_before: List[str] = []
     final_after: List[str] = []
     final_whitespace: List[str] = []
+    conjunction_map = {
+        "bende": ("ben", "de"),
+        "sende": ("sen", "de"),
+        "bizde": ("biz", "de"),
+        "sizde": ("siz", "de"),
+        "ondada": ("onda", "da"),
+        "buda": ("bu", "da"),
+        "şuda": ("şu", "da"),
+    }
     for i, w in enumerate(processed_words):
         w_lower = turkish_lower(w)
-        if w_lower == "bende":
-            final_tokens.extend(["ben", "de"])
-            final_before.extend([punctuation_before[i], ""])
-            final_after.extend(["", punctuation_after[i]])
-            final_whitespace.extend([whitespace_before[i], " "])
-        elif w_lower == "sende":
-            final_tokens.extend(["sen", "de"])
-            final_before.extend([punctuation_before[i], ""])
-            final_after.extend(["", punctuation_after[i]])
-            final_whitespace.extend([whitespace_before[i], " "])
-        elif w_lower == "bizde":
-            final_tokens.extend(["biz", "de"])
-            final_before.extend([punctuation_before[i], ""])
-            final_after.extend(["", punctuation_after[i]])
-            final_whitespace.extend([whitespace_before[i], " "])
-        elif w_lower == "sizde":
-            final_tokens.extend(["siz", "de"])
-            final_before.extend([punctuation_before[i], ""])
-            final_after.extend(["", punctuation_after[i]])
-            final_whitespace.extend([whitespace_before[i], " "])
-        elif w_lower == "ondada":
-            final_tokens.extend(["onda", "da"])
-            final_before.extend([punctuation_before[i], ""])
-            final_after.extend(["", punctuation_after[i]])
-            final_whitespace.extend([whitespace_before[i], " "])
-        elif w_lower == "buda":
-            final_tokens.extend(["bu", "da"])
-            final_before.extend([punctuation_before[i], ""])
-            final_after.extend(["", punctuation_after[i]])
-            final_whitespace.extend([whitespace_before[i], " "])
-        elif w_lower == "şuda":
-            final_tokens.extend(["şu", "da"])
+        if w_lower in conjunction_map:
+            p1, p2 = conjunction_map[w_lower]
+            changes.append({
+                "original": w,
+                "corrected": f"{p1} {p2}",
+                "rule": "TDK Bağlaç Kuralı: Bağlaç olan 'de/da' ayrı yazılır ve asla 'te/ta' biçiminde yazılmaz.",
+                "type": "conjunction"
+            })
+            final_tokens.extend([p1, p2])
             final_before.extend([punctuation_before[i], ""])
             final_after.extend(["", punctuation_after[i]])
             final_whitespace.extend([whitespace_before[i], " "])
@@ -261,22 +320,28 @@ def fix_sentence(raw_text: str) -> str:
             suffix = get_genitive_suffix(processed_words[0])
             processed_words[0] = processed_words[0] + suffix
 
-    # Soru eki ünlü uyumu düzeltmesi (-mi/-mı/-mu/-mü, -misin, -musun vb.)
+    # Soru eki ünlü uyumu düzeltmesi
     for i in range(1, len(processed_words)):
         w = turkish_lower(processed_words[i])
         if w in QUESTION_PARTICLES:
             prev = processed_words[i - 1]
             corrected_particle = fix_question_particle(prev, w)
+            if corrected_particle != w:
+                changes.append({
+                    "original": w,
+                    "corrected": corrected_particle,
+                    "rule": "TDK Ünlü Uyumu: Soru eki kendinden önceki kelimenin son ünlüsüne göre büyük/küçük ünlü uyumuna girer.",
+                    "type": "vowel_harmony"
+                })
             processed_words[i] = (
                 turkish_upper(corrected_particle)
                 if processed_words[i].isupper()
                 else corrected_particle
             )
 
-    # Devrik Cümle Düzeltmesi (Yüklemi/Fiili sona taşıma - güvenli kontrol):
+    # Devrik Cümle Düzeltmesi (Güvenli kontrol)
     reordered_words = fix_word_order(processed_words[:])
     if reordered_words != processed_words:
-        # Fiil sona taşındı, noktalama ve boşluk dizilimini güvenli güncelle
         moved_before = punctuation_before.pop(0)
         moved_after = punctuation_after.pop(0)
         punctuation_before.append(moved_before)
@@ -284,11 +349,9 @@ def fix_sentence(raw_text: str) -> str:
         whitespace_before = [""] + [" "] * (len(reordered_words) - 1)
         processed_words = reordered_words
 
-    # Cümle başı büyük harf (Türkçe İ / I kuralı)
+    # Cümle başı büyük harf
     first_word = processed_words[0]
-    if PROTECTED_TOKEN.fullmatch(first_word) or first_word.isupper():
-        pass
-    else:
+    if not (PROTECTED_TOKEN.fullmatch(first_word) or first_word.isupper()):
         processed_words[0] = turkish_capitalize(first_word)
 
     # Soru tespiti
@@ -299,6 +362,7 @@ def fix_sentence(raw_text: str) -> str:
             is_question = True
             break
 
+    # Bağlaçlardan önce virgül (CLAUSE_CONNECTORS)
     CLAUSE_CONNECTORS = {"ama", "fakat", "ancak", "lakin", "çünkü", "halbuki", "oysa", "oysaki"}
     reconstructed: List[str] = []
     for i, word in enumerate(processed_words):
@@ -325,7 +389,6 @@ def fix_sentence(raw_text: str) -> str:
     if emoticon_match:
         sentence = sentence[:emoticon_match.start()]
 
-    # Var olan cümle sonu işaretini, kapanış tırnaklarının önünde koru.
     closing_match = re.search(r'[)\]}"\'”’»]+$', sentence)
     closing = closing_match.group(0) if closing_match else ""
     sentence_body = sentence[:-len(closing)] if closing else sentence
@@ -344,7 +407,7 @@ def fix_sentence(raw_text: str) -> str:
             sentence_body += "."
     sentence = sentence_body + closing + emoticon_tail
 
-    # Cümle sonu noktalamasından sonra gelen cümlelerin ilk harfini de büyüt.
+    # Cümle sonu noktalamasından sonra gelen cümlelerin ilk harfini büyüt
     def capitalize_turkish(letter: str) -> str:
         return turkish_upper(letter)
 
@@ -354,4 +417,29 @@ def fix_sentence(raw_text: str) -> str:
         sentence,
     )
 
-    return leading + sentence + trailing
+    final_result = leading + sentence + trailing
+    # Kod bloklarını geri yükle
+    final_result = _restore_code_blocks(final_result, code_blocks)
+
+    elapsed_ms = (time.time() - t0) * 1000
+
+    return {
+        "original": raw_text,
+        "corrected": final_result,
+        "changes": changes,
+        "stats": {
+            "word_count": len(final_result.split()),
+            "char_count": len(final_result),
+            "changes_count": len(changes),
+            "time_ms": round(elapsed_ms, 2)
+        }
+    }
+
+
+def fix_sentence(raw_text: str) -> str:
+    """
+    Kullanıcının girdiği ham metni tam Türkçe gramer kurallarıyla düzeltir.
+    Geriye sadece nihai düzeltilmiş metin döner.
+    """
+    analysis = analyze_sentence(raw_text)
+    return analysis["corrected"]

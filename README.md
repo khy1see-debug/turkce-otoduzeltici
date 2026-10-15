@@ -1,15 +1,18 @@
 # 🇹🇷 Çevrimdışı Türkçe Otomatik Düzeltici (0-Token)
 
-Bitişik yazılan (örn: `sendemigeliyorusn`), imla, harf ve bağlaç hataları barındıran Türkçe metinleri **çevrimdışı (offline)** ve **sıfır (0) token maliyetiyle** otomatik düzelten, modern stüdyo arayüzüne ve sistem tepsisi (system tray) kısayoluna sahip akıllı doğal dil işleme platformu.
+Bitişik yazılan (örn: `sendemigeliyorusn`), imla, harf ve bağlaç hataları barındıran Türkçe metinleri **çevrimdışı (offline)** ve **sıfır (0) token maliyetiyle** otomatik düzelten, modern masaüstü/web stüdyosu arayüzüne, REST API'ye ve sistem tepsisi (system tray) kısayoluna sahip akıllı doğal dil işleme platformu.
 
 ---
 
 ## ⚡ Özellikler
 
-- **0 Token Maliyeti & Gizlilik:** Herhangi bir bulut servisi veya LLM API'si çağırmaz, tamamen yerel CPU üzerinde, verileriniz dışarı çıkmadan anında çalışır.
-- **✨ Gelişmiş Düzeltme & Çevirme Stüdyosu (GUI):** Çift panelli modern masaüstü arayüzü (Giriş / Düzeltilmiş Çıktı, canlı diff vurgulama, örnek metinler, harf sayacı ve tek tıkla kopyalama).
-- **⌨️ Global Kısayol Tuşu & Sistem Tepsisi (Tray):** Herhangi bir programda (Discord, WhatsApp, Word, Tarayıcı vb.) bir metni fareyle seçip **`Alt+Q`** tuşuna bastığınızda seçili metni anında panoda düzeltip yerine yapıştırır.
+- **0 Token Maliyeti & %100 Gizlilik:** Herhangi bir bulut servisi veya LLM API'si çağırmaz, tamamen yerel CPU üzerinde, verileriniz dışarı çıkmadan anında çalışır.
+- **✨ Çift Panelli Masaüstü Stüdyosu (GUI):** Giriş / Düzeltilmiş Çıktı, canlı diff vurgulama, örnek metinler, harf/kelime sayacı ve tek tıkla kopyalama.
+- **🌐 Tarayıcı Tabanlı Web Stüdyosu & REST API:** Herhangi bir kurulum yapmadan tarayıcıdan çalışan DeepL / LanguageTool standartlarında Web Stüdyosu ve harici uygulamalar için REST API.
+- **⌨️ Global Kısayol Tuşu & Sistem Tepsisi (Tray):** Herhangi bir programda (Discord, WhatsApp, Word, Tarayıcı, Kod Editörü vb.) bir metni fareyle seçip **`Alt+Q`** tuşuna bastığınızda seçili metni anında panoda düzeltip yerine yapıştırır.
 - **↩️ Geri Alma & Öz-Öğrenme (Self-Learning):** Düzeltilen metin sonrasında `Ctrl+Z` basıldığında bunu ret olarak kaydeder; kabul edilen kelimeleri ise SQLite veritabanında öğrenerek kişisel sözlüğe katar.
+- **🛡️ Markdown & Kod Koruması:** Metin içindeki kod bloklarına (`` `kod` `` ve ```` ```kod``` ````) dokunmaz, programcıların kod sözdizimini bozmaz.
+- **📚 TDK Kural Açıklamaları:** Her düzeltmenin neden yapıldığını gösteren TDK kural motoru (LanguageTool / Grammarly tarzı açıklama kartları).
 - **🔤 De-asciifier & Asciifier:** 
   - İngilizce klavye harflerini (`c, g, i, o, s, u`) Türkçeleştirir (`ç, ğ, ı, ö, ş, ü`).
   - Türkçe harfleri standart ASCII'ye dönüştürme (Asciifier) modu.
@@ -39,14 +42,22 @@ pip install .
 
 ### 2. Kullanım Modları
 
-#### 🖥️ 1. Görsel Düzeltme Stüdyosu (Modern GUI):
+#### 🌐 1. Web Stüdyosu & REST API (Tarayıcıdan Kullanım):
+```bash
+python -m src.cli --web
+# veya
+turkce-duzelt-web
+```
+> Otomatik olarak tarayıcınızda `http://127.0.0.1:8765` adresinde açılır. Harici istekler için `POST /api/correct` uç noktası sağlar.
+
+#### 🖥️ 2. Görsel Masaüstü Stüdyosu (Modern GUI):
 ```bash
 python -m src.cli --gui
 # veya
 turkce-duzelt-gui
 ```
 
-#### 🛡️ 2. Sistem Tepsisi & Arka Plan Kısayolu (Alt+Q):
+#### 🛡️ 3. Sistem Tepsisi & Arka Plan Kısayolu (Alt+Q):
 ```bash
 python -m src.cli --tray
 # veya
@@ -54,7 +65,7 @@ turkce-duzelt-tray
 ```
 > Arka planda sessizce çalışır. Herhangi bir uygulamada metni seçip `Alt+Q` tuşuna basın, anında düzeltilsin! Beğenmezseniz 2 saniye içinde `Ctrl+Z` yaparak geri alabilirsiniz.
 
-#### 💻 3. Komut Satırından Hızlı Kullanım:
+#### 💻 4. Komut Satırından Hızlı Kullanım:
 ```bash
 # Tek seferlik düzeltme
 python -m src.cli "sendemigeliyorusn"
@@ -70,25 +81,24 @@ python -m src.cli --deasciify "ogrencileringozlerindensevincokunuyordu"
 python -m src.cli --asciify "Öğrenciler şampiyon oldu"
 ```
 
-#### 🐍 4. Python Kütüphanesi Olarak Kullanım:
+#### 🐍 5. Python Kütüphanesi Olarak Kullanım:
 ```python
-from src.grammar import fix_sentence
+from src.grammar import fix_sentence, analyze_sentence
 from src.deasciifier import deasciify_text, asciify_text
 
-# Tam akıllı düzeltme
-print(fix_sentence("sendemigeliyorusn"))
-# Çıktı: "Sen de mi geliyorsun?"
+# 1. Hızlı Düzeltme
+print(fix_sentence("sendemigeliyorusn `kod_degiskeni` herkez biliyo"))
+# Çıktı: "Sen de mi geliyorsun `kod_degiskeni` herkes biliyor."
 
-print(fix_sentence("herkez birşey biliyo ama yanlız kaldım"))
-# Çıktı: "Herkes bir şey biliyor, ama yalnız kaldım."
+# 2. TDK Kural Açıklamalı Analiz
+analysis = analyze_sentence("herkez birşey biliyo")
+print(analysis["corrected"])
+for change in analysis["changes"]:
+    print(f"{change['original']} -> {change['corrected']} ({change['rule']})")
 
-# De-asciifier
-print(deasciify_text("ogrenci goz sevinc"))
-# Çıktı: "öğrenci göz sevinç"
-
-# Asciifier
-print(asciify_text("Öğrenciler Türkçe konuşuyor"))
-# Çıktı: "Ogrenciler Turkce konusuyor"
+# 3. De-asciifier & Asciifier
+print(deasciify_text("ogrenci goz sevinc"))  # "öğrenci göz sevinç"
+print(asciify_text("Türkçe Karakterler"))    # "Turkce Karakterler"
 ```
 
 ---
@@ -105,9 +115,17 @@ turkce-duzelt --list-words
 
 ---
 
-## 🧪 Testler
+## 📦 Windows .exe Derleme
 
-Test paketini çalıştırmak için:
+Uygulamayı Python yüklü olmayan herhangi bir Windows bilgisayarda tek tıkla çalıştırmak için:
+
+```bash
+uv run --with pyinstaller python build_windows.py
+```
+
+---
+
+## 🧪 Testler
 
 ```bash
 uv run --with pytest pytest

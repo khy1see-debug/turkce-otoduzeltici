@@ -22,6 +22,7 @@ dev = ["pytest>=8,<10", "ruff>=0.14,<1"]
 [project.scripts]
 turkce-duzelt = "src.cli:main"
 turkce-duzelt-gui = "src.main_window:main"
+turkce-duzelt-web = "src.web:run_web_studio"
 turkce-duzelt-tray = "src.app_tray:main"
 turkce-duzelt-fast = "src.daemon_client:main"
 turkce-duzelt-daemon = "src.daemon:main"

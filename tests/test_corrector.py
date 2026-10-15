@@ -95,3 +95,16 @@ def test_asciifier_and_deasciifier():
     from src.deasciifier import asciify_text, deasciify_text
     assert asciify_text("Öğrenciler şampiyon oldu.") == "Ogrenciler sampiyon oldu."
     assert deasciify_text("ogrenci goz sevinc") == "öğrenci göz sevinç"
+
+def test_code_block_protection():
+    raw = "burada kod: `git commit -m \"fix\"` ve sendemigeliyorusn"
+    res = fix_sentence(raw)
+    assert '`git commit -m "fix"`' in res
+    assert "sen de mi geliyorsun" in res
+
+def test_analyze_sentence():
+    from src.grammar import analyze_sentence
+    analysis = analyze_sentence("herkez birşey biliyo")
+    assert analysis["corrected"] == "Herkes bir şey biliyor."
+    assert len(analysis["changes"]) >= 2
+    assert any("TDK" in c["rule"] or "Chat" in c["rule"] for c in analysis["changes"])

@@ -34,6 +34,11 @@ def main():
         help="Gelişmiş grafiksel stüdyo arayüzünü (GUI) aç"
     )
     parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Tarayıcı tabanlı modern Web Stüdyosunu ve REST API'yi aç"
+    )
+    parser.add_argument(
         "--tray",
         action="store_true",
         help="Sistem tepsisi (system tray) arka plan servisini başlat (Alt+Q kısayolu)"
@@ -61,6 +66,12 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Web Stüdyosu Modu
+    if args.web:
+        from src.web import run_web_studio
+        run_web_studio()
+        return 0
 
     # GUI Modu
     if args.gui:
