@@ -278,7 +278,7 @@ class MainWindow(QMainWindow):
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
             "🤖 Otomatik Akıllı Algılama (Stil, Harf Düzeni ve İmlayı Kendi Anlar)",
-            "✨ Yapay Zeka ile Düzelt (NVIDIA NIM / Llama 3.3 70B)",
+            "✨ Yapay Zeka ile Düzelt (NVIDIA NIM / Llama 3.2)",
             "🇹🇷 Tam Akıllı Düzeltme (TDK + Segmenter + İmla + Noktalama)",
             "🔤 De-asciifier (ASCII ➜ Türkçe Harfler: c,g,i,o,s,u ➜ ç,ğ,ı,ö,ş,ü)",
             "🌐 Asciifier (Türkçe ➜ ASCII: ç,ğ,ı,ö,ş,ü ➜ c,g,i,o,s,u)",
@@ -436,7 +436,7 @@ class MainWindow(QMainWindow):
                 ai_res = fix_with_ai(raw_text)
                 if ai_res and ai_res.strip():
                     result = ai_res.strip()
-                    engine_label = "NVIDIA NIM AI (Llama 3.3 70B)"
+                    engine_label = "NVIDIA NIM AI (Llama 3.2)"
                 else:
                     # Geri düşüş
                     result = fix_sentence(raw_text)

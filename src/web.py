@@ -380,7 +380,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="control-bar">
             <div class="mode-selectors">
                 <button class="mode-btn active" onclick="setMode('full', this)">🤖 Otomatik Akıllı İmla</button>
-                <button class="mode-btn" onclick="setMode('ai', this)">✨ NVIDIA AI (Llama 3.3 70B)</button>
+                <button class="mode-btn" onclick="setMode('ai', this)">✨ NVIDIA AI (Llama 3.2)</button>
                 <button class="mode-btn" onclick="setMode('deasciify', this)">🔤 De-asciifier</button>
                 <button class="mode-btn" onclick="setMode('asciify', this)">🌐 Asciifier</button>
                 <button class="mode-btn" onclick="setMode('sentence_case', this)">🔠 Cümle Düzeni</button>

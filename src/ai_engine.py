@@ -16,14 +16,12 @@ from typing import Optional, Tuple
 from src import settings_manager
 
 DEFAULT_NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-DEFAULT_MODEL = "meta/llama-3.3-70b-instruct"
+DEFAULT_MODEL = "meta/llama-3.2-11b-vision-instruct"
 
 AVAILABLE_MODELS = [
-    ("meta/llama-3.3-70b-instruct", "Llama 3.3 70B (Önerilen - En Yüksek İmla ve Anlam Kalitesi)"),
-    ("meta/llama-3.1-8b-instruct", "Llama 3.1 8B (Ultra Hızlı ve Hafif)"),
-    ("mistralai/mixtral-8x7b-instruct-v0.1", "Mixtral 8x7B (Çok Dilli Güçlü Model)"),
-    ("nvidia/llama-3.1-nemotron-70b-instruct", "Nemotron 70B (NVIDIA İnce Ayarlı)"),
-    ("deepseek-ai/deepseek-r1", "DeepSeek R1 (Derin Muhakeme & Düzeltme)"),
+    ("meta/llama-3.2-11b-vision-instruct", "Meta Llama 3.2 11B (Önerilen - Hızlı & Yüksek Doğruluk)"),
+    ("openai/gpt-oss-20b", "GPT-OSS 20B (NVIDIA NIM)"),
+    ("stepfun-ai/step-5-preview", "Step-5 Preview (Ultra Hızlı ~1sn)"),
 ]
 
 SYSTEM_PROMPT = (
@@ -126,7 +124,7 @@ def call_nvidia_nim(
 def test_nvidia_connection(
     api_key: str,
     model: Optional[str] = None,
-    timeout: float = 6.0,
+    timeout: float = 8.0,
 ) -> Tuple[bool, str, float]:
     """
     Girilen NVIDIA API anahtarını ve bağlantısını test eder.
@@ -137,14 +135,46 @@ def test_nvidia_connection(
         return False, "API anahtarı boş bırakılamaz.", 0.0
 
     target_model = model or DEFAULT_MODEL
-    t0 = time.time()
-    res = call_nvidia_nim("Merhaba dünya nasılsın", api_key=key, model=target_model, timeout=timeout)
-    latency_ms = round((time.time() - t0) * 1000, 1)
+    payload = {
+        "model": target_model,
+        "messages": [
+            {"role": "user", "content": "test"}
+        ],
+        "max_tokens": 5,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        DEFAULT_NVIDIA_URL,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Turkce-Otoduzeltici/1.0",
+        },
+        method="POST",
+    )
 
-    if res:
-        return True, f"Bağlantı başarılı! Model: {target_model}", latency_ms
-    else:
-        return False, "Bağlantı kurulamadı. API anahtarınızı veya internet bağlantınızı kontrol edin.", latency_ms
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if response.status == 200:
+                latency_ms = round((time.time() - t0) * 1000, 1)
+                return True, f"Bağlantı başarılı! ({target_model})", latency_ms
+    except urllib.error.HTTPError as exc:
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        err_body = exc.read().decode("utf-8", errors="replace")
+        try:
+            err_json = json.loads(err_body)
+            msg = err_json.get("detail") or err_json.get("title") or str(exc)
+        except Exception:
+            msg = f"HTTP {exc.code} {exc.reason}"
+        return False, f"NVIDIA API Hatası ({msg})", latency_ms
+    except Exception as exc:
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        return False, f"Bağlantı hatası: {exc}", latency_ms
+
+    return False, "Bilinmeyen yanıt alındı.", 0.0
 
 
 def fix_with_ai(

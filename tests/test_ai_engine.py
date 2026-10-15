@@ -21,6 +21,16 @@ def test_test_nvidia_connection_empty():
     assert "boş" in msg.lower()
 
 
+def test_test_nvidia_connection_mocked():
+    fake_response = MagicMock()
+    fake_response.status = 200
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value.__enter__.return_value = fake_response
+        ok, msg, latency = ai_engine.test_nvidia_connection("nvapi-valid", "meta/llama-3.2-11b-vision-instruct")
+        assert ok
+        assert "başarılı" in msg.lower()
+
+
 def test_call_nvidia_nim_success():
     fake_response = MagicMock()
     fake_response.status = 200
