@@ -8,13 +8,21 @@ version = "0.1.0"
 description = "Çevrimdışı Türkçe yazım ve metin düzeltici"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["wordfreq>=3.1.1,<4"]
+dependencies = [
+    "keyboard>=0.13.0",
+    "pillow>=10.0.0",
+    "pyperclip>=1.8.0",
+    "pyqt6>=6.5.0",
+    "wordfreq>=3.1.1,<4",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.14,<1"]
 
 [project.scripts]
 turkce-duzelt = "src.cli:main"
+turkce-duzelt-gui = "src.main_window:main"
+turkce-duzelt-tray = "src.app_tray:main"
 turkce-duzelt-fast = "src.daemon_client:main"
 turkce-duzelt-daemon = "src.daemon:main"
 

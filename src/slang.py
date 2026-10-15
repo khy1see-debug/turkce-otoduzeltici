@@ -1,12 +1,107 @@
-"""Türkçe Chat Kısaltmaları ve Günlük Konuşma Genişletici (Slang Expander).
-Discord, Instagram, WhatsApp ve oyun sohbetlerinde sıkça geçen kısaltmaları ve
-ağız/günlük konuşma kalıplarını standart Türkçeye dönüştürür.
+"""
+Türkçe Chat Kısaltmaları, TDK Sık Yapılan Hatalar ve Harf Uzatması Düzeltici (Slang & Elongation Expander).
+Discord, Instagram, WhatsApp ve oyun sohbetlerinde sıkça geçen kısaltmaları,
+TDK resmi yazım kurallarına aykırı yaygın hataları ve uzatılmış harfleri standart Türkçeye dönüştürür.
 """
 
-from src.turkish_case import turkish_lower
+import re
 from typing import Optional
+from src.turkish_case import turkish_lower
+from src.dictionary import is_valid_word
+from src.deasciifier import deasciify_word
+
+# TDK Resmi Yazım Kılavuzu: En Sık Yapılan Yazım Hataları ve Doğruları
+TDK_COMMON_MISSPELLINGS = {
+    "herkez": "herkes",
+    "yalnış": "yanlış",
+    "yanlız": "yalnız",
+    "traş": "tıraş",
+    "orjinal": "orijinal",
+    "labaratuvar": "laboratuvar",
+    "klavuz": "kılavuz",
+    "insiyatif": "inisiyatif",
+    "süpriz": "sürpriz",
+    "supriz": "sürpriz",
+    "eksoz": "egzoz",
+    "egzos": "egzoz",
+    "egzoz": "egzoz",
+    "şarz": "şarj",
+    "sarz": "şarj",
+    "dinazor": "dinozor",
+    "ahçı": "aşçı",
+    "ahcilik": "aşçılık",
+    "karnıbahar": "karnabahar",
+    "kravat": "kravat",
+    "rastlantı": "rastlantı",
+    "rasgele": "rastgele",
+    "ayrıyeten": "ayrıca",
+    "tesbit": "tespit",
+    "doküman": "doküman",
+    "döküman": "doküman",
+    "unvan": "unvan",
+    "ünvan": "unvan",
+    "muhattap": "muhatap",
+    "mütahhit": "müteahhit",
+    "müsade": "müsaade",
+    "tabiki": "tabii ki",
+    "tabikide": "tabii ki de",
+    "iyiki": "iyi ki",
+    "demekki": "demek ki",
+    "oyleki": "öyle ki",
+    "öyleki": "öyle ki",
+    "kaldıki": "kaldı ki",
+    "bilmemki": "bilmem ki",
+    "anladımki": "anladım ki",
+    "yeterki": "yeter ki",
+    "farketmez": "fark etmez",
+    "farketmek": "fark etmek",
+    "terketmek": "terk etmek",
+    "terketti": "terk etti",
+    "kaybolmak": "kaybolmak",
+    "arzetmek": "arz etmek",
+    "haketmek": "hak etmek",
+    "hakketmek": "hak etmek",
+    "saatlerolsun": "sıhhatler olsun",
+    "sağol": "sağ ol",
+    "sagol": "sağ ol",
+    "hoşçakal": "hoşça kal",
+    "hoscakal": "hoşça kal",
+    "hoşgeldin": "hoş geldin",
+    "hosgeldin": "hoş geldin",
+    "hoşbulduk": "hoş bulduk",
+    "hosbulduk": "hoş bulduk",
+    "pekçok": "pek çok",
+    "pekaz": "pek az",
+    "herbiri": "her biri",
+    "hergün": "her gün",
+    "hiçkimse": "hiç kimse",
+    "hickimse": "hiç kimse",
+    "yüzyüze": "yüz yüze",
+    "ardıardına": "ardı ardına",
+    "peşisıra": "peşi sıra",
+    "yanısıra": "yanı sıra",
+}
 
 CHAT_SLANG_MAP = {
+    # --- "Şey" İfadeleri (TDK: daima ayrı) ---
+    "hersey": "her şey",
+    "herşey": "her şey",
+    "bişey": "bir şey",
+    "bisey": "bir şey",
+    "birsey": "bir şey",
+    "birşey": "bir şey",
+    "hiçbirşey": "hiçbir şey",
+    "hicbirsey": "hiçbir şey",
+    "bisi": "bir şey",
+    "bişi": "bir şey",
+    "coksey": "çok şey",
+    "çokşey": "çok şey",
+    "hicbisi": "hiçbir şey",
+    "hiçbişi": "hiçbir şey",
+    "hicbir": "hiçbir",
+    "hicbi": "hiçbir",
+    "hiçbi": "hiçbir",
+
     # --- Günlük Konuşma, Kalıplar ve Soru İfadeleri ---
     "bune": "bu ne",
     "şune": "şu ne",
@@ -20,25 +115,6 @@ CHAT_SLANG_MAP = {
     "nolucak": "ne olacak",
     "niden": "neden",
     "niye": "niye",
-    "niyki": "iyi ki",
-    "iyiki": "iyi ki",
-    "hersey": "her şey",
-    "herşey": "her şey",
-    "herkez": "herkes",
-    "herkes": "herkes",
-    "bişey": "bir şey",
-    "bisey": "bir şey",
-    "birsey": "bir şey",
-    "birşey": "bir şey",
-    "hiçbirşey": "hiçbir şey",
-    "hicbirsey": "hiçbir şey",
-    "bisi": "bir şey",
-    "bişi": "bir şey",
-    "hicbi": "hiçbir",
-    "hicbir": "hiçbir",
-    "hiçbi": "hiçbir",
-    "hicbisi": "hiçbir şey",
-    "hiçbişi": "hiçbir şey",
 
     # --- Konum & Bulunma Bildiren Günlük Kelimeler ---
     "içerdeyim": "içerideyim",
@@ -72,10 +148,6 @@ CHAT_SLANG_MAP = {
     "flnsal": "falansal",
     "falansal": "falansal",
     "filan": "falan",
-    "vb": "ve benzeri",
-    "vs": "ve benzeri",
-    "v.b": "ve benzeri",
-    "v.s": "ve benzeri",
     "aynn": "aynen",
     "ayn": "aynen",
 
@@ -116,7 +188,6 @@ CHAT_SLANG_MAP = {
     "rica": "rica ederim",
     "ö.d": "önemli değil",
     "od": "önemli değil",
-    "onemli degil": "önemli değil",
     "hyr": "hayır",
     "evt": "evet",
     "nys": "neyse",
@@ -126,8 +197,6 @@ CHAT_SLANG_MAP = {
     "sence": "sence",
     "acaba": "acaba",
     "tabi": "tabii",
-    "tabiki": "tabii ki",
-    "tabikide": "tabii ki de",
 
     # --- Sık Kullanılan Fiil / Eylem Kısaltmaları ---
     "napion": "ne yapıyorsun",
@@ -193,7 +262,6 @@ CHAT_SLANG_MAP = {
     "bilmiom": "bilmiyorum",
     "bilmiyom": "bilmiyorum",
     "istemiom": "istemiyorum",
-    "istemiyom": "istemiyorum",
     "anlamiom": "anlamıyorum",
     "anlamıyom": "anlamıyorum",
     "gorüşürüz": "görüşürüz",
@@ -216,17 +284,67 @@ CHAT_SLANG_MAP = {
     # --- Zaman & Bağlaç Kısaltmaları ---
     "zmn": "zaman",
     "nezaman": "ne zaman",
-    "şimdi": "şimdi",
     "simdi": "şimdi",
     "sora": "sonra",
     "soraan": "sonradan",
     "azora": "az sonra",
-    "bi": "bir",
     "bida": "bir daha",
     "bidaha": "bir daha",
     "tekra": "tekrar"
 }
 
+# Birleşik haritası
+ALL_EXPANSIONS = {**CHAT_SLANG_MAP, **TDK_COMMON_MISSPELLINGS}
+
+
+def normalize_elongation(word: str) -> str:
+    """
+    Kelimedeki aşırı harf tekrarlarını (uzatmaları) temizler.
+    Örnek:
+      'geliyoruuuum' -> 'geliyorum'
+      'coooooolll' -> 'cool'
+      'guuuuuuuuzel' -> 'güzel'
+      'lütfeeeen' -> 'lütfen'
+      'merhabalarrrr' -> 'merhabalar'
+    """
+    clean_w = turkish_lower(word)
+    # Eğer 3 veya daha fazla ardışık aynı harf yoksa dokunma
+    if not re.search(r'(.)\1{2,}', clean_w):
+        return word
+
+    # 1. 3+ tekrar eden tüm harfleri tek veya çift harfe indirge
+    # Örn: 'geliyoruuuum' -> 'geliyorum', 'cooooool' -> 'cool'
+    # Önce tek harfe indirgeyip sözlük kontrolü yap
+    single_reduced = re.sub(r'(.)\1{2,}', r'\1', clean_w)
+    deasc_single = deasciify_word(single_reduced)
+    if is_valid_word(deasc_single):
+        return deasc_single
+    if is_valid_word(single_reduced):
+        return single_reduced
+
+    # Çift harfe indirge (Örn: 'cooooool' -> 'cool', 'hakkkkı' -> 'hakkı')
+    double_reduced = re.sub(r'(.)\1{2,}', r'\1\1', clean_w)
+    deasc_double = deasciify_word(double_reduced)
+    if is_valid_word(deasc_double):
+        return deasc_double
+    if is_valid_word(double_reduced):
+        return double_reduced
+
+    return single_reduced
+
+
 def expand_slang(token: str) -> Optional[str]:
-    """Kısaltma veya chat argo kelimesini tam Türkçe karşılığına açar."""
-    return CHAT_SLANG_MAP.get(turkish_lower(token))
+    """Kısaltma, TDK yaygın hatası veya chat argo kelimesini tam Türkçe karşılığına açar."""
+    w = turkish_lower(token)
+    if w in ALL_EXPANSIONS:
+        return ALL_EXPANSIONS[w]
+
+    # Uzatma kontrolü (geliyoruuuum vb.)
+    normalized = normalize_elongation(w)
+    if normalized != w:
+        if normalized in ALL_EXPANSIONS:
+            return ALL_EXPANSIONS[normalized]
+        if is_valid_word(normalized):
+            return normalized
+
+    return None

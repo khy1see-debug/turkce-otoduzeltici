@@ -1,100 +1,121 @@
 # 🇹🇷 Çevrimdışı Türkçe Otomatik Düzeltici (0-Token)
 
-Bitişik yazılan (örn: `sendemigeliyorusn`), imla ve harf hataları barındıran Türkçe metinleri **çevrimdışı (offline)** ve **sıfır (0) token maliyetiyle** otomatik düzelten Python tabanlı akıllı doğal dil işleme kütüphanesi ve CLI aracı.
+Bitişik yazılan (örn: `sendemigeliyorusn`), imla, harf ve bağlaç hataları barındıran Türkçe metinleri **çevrimdışı (offline)** ve **sıfır (0) token maliyetiyle** otomatik düzelten, modern stüdyo arayüzüne ve sistem tepsisi (system tray) kısayoluna sahip akıllı doğal dil işleme platformu.
 
 ---
 
 ## ⚡ Özellikler
-- **0 Token Maliyeti:** Herhangi bir API (OpenAI, Gemini vb.) çağırmaz, tamamen yerel CPU üzerinde çalışır.
-- **Bitişik Kelime Ayrımı (Word Segmentation):** `sendemigeliyorusn` $\rightarrow$ `Sen de mi geliyorsun?`
-- **İmla ve Harf Hatası Düzeltme:** Damerau-Levenshtein tabanlı Türkçe harf mesafesi ve frekans sözlüğü.
-- **Dilbilgisi ve Noktalama:** 
-  - Bağlaç olan *-de / -da* ayrımı
-  - Soru eki *-mi / -mı / -mu / -mü* ayrımı
-  - Cümle başı büyük harf ve uygun noktalama (`.` veya `?`) ekleme.
-- **İnteraktif CLI:** Terminalden anlık interaktif kullanım modu.
+
+- **0 Token Maliyeti & Gizlilik:** Herhangi bir bulut servisi veya LLM API'si çağırmaz, tamamen yerel CPU üzerinde, verileriniz dışarı çıkmadan anında çalışır.
+- **✨ Gelişmiş Düzeltme & Çevirme Stüdyosu (GUI):** Çift panelli modern masaüstü arayüzü (Giriş / Düzeltilmiş Çıktı, canlı diff vurgulama, örnek metinler, harf sayacı ve tek tıkla kopyalama).
+- **⌨️ Global Kısayol Tuşu & Sistem Tepsisi (Tray):** Herhangi bir programda (Discord, WhatsApp, Word, Tarayıcı vb.) bir metni fareyle seçip **`Alt+Q`** tuşuna bastığınızda seçili metni anında panoda düzeltip yerine yapıştırır.
+- **↩️ Geri Alma & Öz-Öğrenme (Self-Learning):** Düzeltilen metin sonrasında `Ctrl+Z` basıldığında bunu ret olarak kaydeder; kabul edilen kelimeleri ise SQLite veritabanında öğrenerek kişisel sözlüğe katar.
+- **🔤 De-asciifier & Asciifier:** 
+  - İngilizce klavye harflerini (`c, g, i, o, s, u`) Türkçeleştirir (`ç, ğ, ı, ö, ş, ü`).
+  - Türkçe harfleri standart ASCII'ye dönüştürme (Asciifier) modu.
+- **📚 TDK Resmi İmla & Sık Yapılan Hatalar Kılavuzu:**
+  - `herkez` $\rightarrow$ `herkes`, `yalnış` $\rightarrow$ `yanlış`, `orjinal` $\rightarrow$ `orijinal`, `süpriz` $\rightarrow$ `sürpriz`, `labaratuvar` $\rightarrow$ `laboratuvar`, `tabiki` $\rightarrow$ `tabii ki`, `iyiki` $\rightarrow$ `iyi ki`
+- **🧩 Bitişik Kelime Ayrımı (Word Segmentation):** `sendemigeliyorusn` $\rightarrow$ `Sen de mi geliyorsun?`
+- **🔗 Dilbilgisi, Bağlaç ve Soru Ekleri:**
+  - Bağlaç olan *-de / -da* ayrımı (`sen de`, `o da`, `Ali de`, `biz de`)
+  - Bitişik yazılan soru eklerini ayırma ve ünlü uyumu (`geliyormusun` $\rightarrow$ `geliyor musun?`, `bakarmısınız` $\rightarrow$ `bakar mısınız?`)
+  - Bağlaç olan *-ki* ayrımı (`demek ki`, `öyle ki`, `iyi ki`)
+- **🧹 Harf Uzatmalarını Temizleme (Elongation Reduction):** `geliyoruuuum` $\rightarrow$ `geliyorum`, `çooooook` $\rightarrow$ `çok`, `lütfeeeen` $\rightarrow$ `lütfen`
+- **💬 Chat Argosu ve Kısaltmaları:** `slm` $\rightarrow$ `selam`, `nbr` $\rightarrow$ `naber`, `knk` $\rightarrow$ `kanka`, `tşk` $\rightarrow$ `teşekkürler`
 
 ---
 
 ## 🚀 Hızlı Başlangıç
 
 ### 1. Kurulum
+
 ```bash
-# uv ile kullanıcı hesabına komut olarak kurun
-uv tool install .
+# uv ile bağımlılıkları yükleyin
+uv sync
+
+# Veya pip ile kurun
+pip install .
 ```
 
-Alternatif olarak sanal ortamda `python -m pip install .` kullanabilirsiniz.
-Kişisel kelimeler `~/.config/turkce-otoduzeltici/kisisel_sozluk.txt` içinde yerel
-kalır. Eklemek, silmek ve listelemek için:
+### 2. Kullanım Modları
 
+#### 🖥️ 1. Görsel Düzeltme Stüdyosu (Modern GUI):
 ```bash
-turkce-duzelt --add-word Minecraft
-turkce-duzelt --remove-word Minecraft
-turkce-duzelt --list-words
+python -m src.cli --gui
+# veya
+turkce-duzelt-gui
 ```
 
-Arka plan servisi dosya değişikliğini bir sonraki düzeltmede algılar; servisi
-yeniden başlatmak gerekmez.
-
-Wayland kısayolunu sık kullanıyorsanız sözlüğü oturum boyunca bellekte tutan
-kullanıcı servisini kurabilirsiniz:
-
+#### 🛡️ 2. Sistem Tepsisi & Arka Plan Kısayolu (Alt+Q):
 ```bash
-bash install-user-service.sh
+python -m src.cli --tray
+# veya
+turkce-duzelt-tray
 ```
+> Arka planda sessizce çalışır. Herhangi bir uygulamada metni seçip `Alt+Q` tuşuna basın, anında düzeltilsin! Beğenmezseniz 2 saniye içinde `Ctrl+Z` yaparak geri alabilirsiniz.
 
-Servis sözlüğü bir kez yükler; `desktop-shortcut.sh` hızlı istemciyi bulursa
-bu servise bağlanır. Servis kapalıysa istemci başlatmayı dener. Servis kurulu
-değilse normal düzelticiye geri döner. Servisi yönetmek için:
-
+#### 💻 3. Komut Satırından Hızlı Kullanım:
 ```bash
-systemctl --user status turkce-otoduzeltici.service
-systemctl --user disable --now turkce-otoduzeltici.service
-```
-
-### 2. Kullanım
-
-#### Komut Satırından Tek Seferlik Düzeltme:
-```bash
-python3 -m src.cli "sendemigeliyorusn"
+# Tek seferlik düzeltme
+python -m src.cli "sendemigeliyorusn"
 # Çıktı: Sen de mi geliyorsun?
+
+# Canlı terminal interaktif modu
+python -m src.cli -i
+
+# Sadece de-asciifier (ASCII -> Türkçe)
+python -m src.cli --deasciify "ogrencileringozlerindensevincokunuyordu"
+
+# Sadece asciifier (Türkçe -> ASCII)
+python -m src.cli --asciify "Öğrenciler şampiyon oldu"
 ```
 
-#### Canlı / İnteraktif Terminal Modu:
-```bash
-python3 -m src.cli -i
-```
-
-#### Python Kodu İçinde Kullanım:
+#### 🐍 4. Python Kütüphanesi Olarak Kullanım:
 ```python
 from src.grammar import fix_sentence
+from src.deasciifier import deasciify_text, asciify_text
 
+# Tam akıllı düzeltme
 print(fix_sentence("sendemigeliyorusn"))
 # Çıktı: "Sen de mi geliyorsun?"
 
-print(fix_sentence("bugunhavacokguzel"))
-# Çıktı: "Bugün hava çok güzel."
+print(fix_sentence("herkez birşey biliyo ama yanlız kaldım"))
+# Çıktı: "Herkes bir şey biliyor, ama yalnız kaldım."
+
+# De-asciifier
+print(deasciify_text("ogrenci goz sevinc"))
+# Çıktı: "öğrenci göz sevinç"
+
+# Asciifier
+print(asciify_text("Öğrenciler Türkçe konuşuyor"))
+# Çıktı: "Ogrenciler Turkce konusuyor"
 ```
 
-Kurulumdan sonra Python'dan içe aktarım için aynı `src.grammar` modülünü kullanın.
+---
+
+## 📖 Kişisel Sözlük ve Öz-Öğrenme
+
+Kişisel sözlüğünüze özel terimler (oyun adları, yazılım kütüphaneleri, kişi adları) ekleyebilir veya sistemin kendi öğrendiklerini yönetebilirsiniz:
+
+```bash
+turkce-duzelt --add-word Valorant
+turkce-duzelt --remove-word Valorant
+turkce-duzelt --list-words
+```
 
 ---
 
 ## 🧪 Testler
 
-Geliştirme bağımlılıklarını kilit dosyasındaki sürümlerle kurmak için:
+Test paketini çalıştırmak için:
 
 ```bash
-uv sync --locked --extra dev
+uv run --with pytest pytest
+uv run --with ruff ruff check src tests
 ```
 
-Testleri ve temel statik kontrolü çalıştırmak için:
+---
 
-```bash
-.venv/bin/pytest -q
-.venv/bin/ruff check src tests
-```
+## 📜 Lisans
 
-GitHub Actions, her push ve pull request'te testleri Python 3.10, 3.12 ve
-3.14 üzerinde çalıştırır.
+MIT License — Açık kaynaklı ve ücretsiz.

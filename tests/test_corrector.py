@@ -79,3 +79,19 @@ def test_common_turkish_spelling_and_chat_typos():
 def test_question_suffix_written_attached_is_separated():
     assert fix_sentence("geliyormusun") == "Geliyor musun?"
     assert fix_sentence("iyimisiniz") == "İyi misiniz?"
+
+def test_elongation_reduction():
+    assert fix_sentence("geliyoruuuum") == "Geliyorum."
+    assert fix_sentence("guuuuuuuuzel") == "Güzel."
+    assert fix_sentence("lütfeeeen") == "Lütfen."
+
+def test_tdk_misspellings_correction():
+    assert fix_sentence("orjinal labaratuvar") == "Orijinal laboratuvar."
+    assert fix_sentence("yalnış ve yanlız") == "Yanlış ve yalnız."
+    assert fix_sentence("tabiki de gelirim") == "Tabii ki de gelirim."
+    assert fix_sentence("iyiki varsın") == "İyi ki varsın."
+
+def test_asciifier_and_deasciifier():
+    from src.deasciifier import asciify_text, deasciify_text
+    assert asciify_text("Öğrenciler şampiyon oldu.") == "Ogrenciler sampiyon oldu."
+    assert deasciify_text("ogrenci goz sevinc") == "öğrenci göz sevinç"

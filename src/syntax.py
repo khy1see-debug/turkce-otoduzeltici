@@ -1,8 +1,7 @@
 """
-Türkçe Devrik Cümle Düzeltici (Word Order Normalizer).
-Örnek:
-  "gördüm seni dün sokakta" -> "seni dün sokakta gördüm"
-  "geldim eve biraz önce" -> "eve biraz önce geldim"
+Türkçe Devrik Cümle İnceleyici ve Düzeltici (Word Order Normalizer).
+Açık ve devrik kuralsız fiil yerleşimlerini cümlenin sonuna taşır.
+Soru cümlelerini, ünlemleri ve şiirsel/özgün anlatımları bozmaz.
 """
 
 import re
@@ -30,33 +29,41 @@ NON_VERBS = {
     'dün', 'gün', 'bin', 'on', 'son', 'ten', 'sen', 'ben', 'siz', 'biz',
     'demir', 'fikir', 'kedi', 'bilgisayar', 'şehir', 'iyi', 'güzel', 'var', 'yok',
     'bugün', 'yarın', 'şimdi', 'sonra', 'önce', 'akşam', 'sabah', 'gece',
-    'evet', 'hayır', 'tamam', 'peki', 'aynen', 'falan', 'falansal'
+    'evet', 'hayır', 'tamam', 'peki', 'aynen', 'falan', 'falansal', 'neden', 'niçin',
+    'nasıl', 'nerede', 'kim', 'hangi', 'kaç'
 }
 
 def is_finite_verb(word: str) -> bool:
     """Kelimenin çekimli bir fiil olup olmadığını tespit eder."""
-    w = turkish_lower(word).strip(",.?!")
+    w = turkish_lower(word).strip(",.?!:;\"'")
     if w in NON_VERBS or len(w) <= 2:
         return False
     return bool(COMBINED_VERB_REGEX.match(w))
 
 def fix_word_order(tokens: List[str]) -> List[str]:
     """
-    Eğer yüklem/fiil cümlenin en başında veya ortasında kalmışsa
-    ve cümle açık bir devrik cümle ise fiili cümlenin en sonuna taşır.
+    Eğer yüklem/fiil cümlenin en başında kalmışsa ve cümle açık bir düz devrik cümle ise
+    fiili cümlenin sonuna taşır.
+    Soru cümlelerinde, emir kiplerinde veya 2 kelimelik ifadelerde dokunmaz.
     """
     if len(tokens) <= 2:
         return tokens
 
-    # Eğer son kelime zaten fiil veya soru eki ise dokunma
-    last_w = turkish_lower(tokens[-1])
-    if last_w in {"mi", "mı", "mu", "mü"} or is_finite_verb(last_w):
+    # Soru cümlelerinde devriklik düzeltilmez (örn: "Gördün mü onu dün?")
+    lower_tokens = [turkish_lower(t.strip(",.?!:;\"'")) for t in tokens]
+    if any(t in {"mi", "mı", "mu", "mü", "misin", "mısın", "musun", "müsün", "neden", "niye", "nasıl", "kim", "nerede"} for t in lower_tokens):
         return tokens
 
-    # Cümlenin ilk kelimesi fiil mi? (Örn: "Gördüm seni dün sokakta")
-    if is_finite_verb(tokens[0]):
+    # Eğer son kelime zaten fiil ise dokunma
+    last_w = lower_tokens[-1]
+    if is_finite_verb(last_w):
+        return tokens
+
+    # Cümlenin ilk kelimesi çekimli bir fiil mi? (Örn: "Gördüm seni dün sokakta" -> "seni dün sokakta gördüm")
+    if is_finite_verb(lower_tokens[0]):
         verb = tokens.pop(0)
-        tokens.append(verb)
+        # Fiil cümlenin sonuna taşınırken küçük harfe indirgenmeli (cümle başı büyüteç kuralı yeni ilk kelimeye uygulanacak)
+        tokens.append(turkish_lower(verb))
         return tokens
 
     return tokens
