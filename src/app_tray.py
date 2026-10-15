@@ -170,12 +170,27 @@ def correct_selected_text():
                 pyperclip.copy(original_clipboard)
             return
 
-        # Akıllı Harf & İmla Tespiti (Auto-Detect)
-        is_all_caps = selected_text.isupper() and len([c for c in selected_text if c.isalpha()]) > 2
-        corrected_text = fix_sentence(selected_text)
-        if is_all_caps:
-            from src.turkish_case import turkish_upper
-            corrected_text = turkish_upper(corrected_text)
+        # Akıllı Harf & İmla Tespiti (Auto-Detect + Opsiyonel NVIDIA AI)
+        settings = settings_manager.load_settings()
+        used_ai = False
+        corrected_text = None
+
+        if settings.get("use_ai_in_tray", False):
+            try:
+                from src.ai_engine import fix_with_ai
+                ai_res = fix_with_ai(selected_text)
+                if ai_res and ai_res.strip():
+                    corrected_text = ai_res.strip()
+                    used_ai = True
+            except Exception:
+                corrected_text = None
+
+        if not corrected_text:
+            is_all_caps = selected_text.isupper() and len([c for c in selected_text if c.isalpha()]) > 2
+            corrected_text = fix_sentence(selected_text)
+            if is_all_caps:
+                from src.turkish_case import turkish_upper
+                corrected_text = turkish_upper(corrected_text)
 
         if corrected_text != selected_text:
             # Düzeltilmiş metni panoya koyup yapıştır (Ctrl+V)
@@ -200,8 +215,9 @@ def correct_selected_text():
             if settings.get("sound_toggle", True):
                 _notification_manager.play_sound("success")
 
+            title = "✨ Metin Düzeltildi (NVIDIA AI)" if used_ai else "✨ Metin Düzeltildi"
             _notification_manager.show_notification(
-                "✨ Metin Düzeltildi",
+                title,
                 f"{selected_text} ➜ {corrected_text}"
             )
 

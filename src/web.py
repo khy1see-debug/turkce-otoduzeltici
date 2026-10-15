@@ -379,7 +379,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <main>
         <div class="control-bar">
             <div class="mode-selectors">
-                <button class="mode-btn active" onclick="setMode('full', this)">🇹🇷 Tam Akıllı Düzeltme</button>
+                <button class="mode-btn active" onclick="setMode('full', this)">🤖 Otomatik Akıllı İmla</button>
+                <button class="mode-btn" onclick="setMode('ai', this)">✨ NVIDIA AI (Llama 3.3 70B)</button>
                 <button class="mode-btn" onclick="setMode('deasciify', this)">🔤 De-asciifier</button>
                 <button class="mode-btn" onclick="setMode('asciify', this)">🌐 Asciifier</button>
                 <button class="mode-btn" onclick="setMode('sentence_case', this)">🔠 Cümle Düzeni</button>
@@ -628,7 +629,20 @@ class CorrectionApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/process" or parsed.path == "/api/correct":
             t0 = time.time()
             changes = []
-            if mode == "deasciify":
+            if mode == "ai":
+                from src.ai_engine import fix_with_ai
+                api_key = payload.get("api_key")
+                ai_res = fix_with_ai(text, api_key=api_key)
+                if ai_res:
+                    result = ai_res
+                else:
+                    is_all_caps = text.isupper() and len([c for c in text if c.isalpha()]) > 2
+                    analysis = analyze_sentence(text)
+                    result = analysis["corrected"]
+                    if is_all_caps:
+                        result = turkish_upper(result)
+                    changes = analysis["changes"]
+            elif mode == "deasciify":
                 result = deasciify_text(text)
             elif mode == "asciify":
                 result = asciify_text(text)

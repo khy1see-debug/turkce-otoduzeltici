@@ -53,6 +53,11 @@ def main():
         action="store_true",
         help="Türkçe karakterleri ASCII harflere dönüştür"
     )
+    parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Yapay zeka (NVIDIA NIM / LLM) motorunu kullanarak düzelt"
+    )
 
     dictionary_actions = parser.add_mutually_exclusive_group()
     dictionary_actions.add_argument(
@@ -121,6 +126,19 @@ def main():
             print(asciify_text(args.text))
         else:
             print("Lütfen dönüştürülecek bir metin girin.")
+        return 0
+
+    # Yapay Zeka ile Düzeltme Modu
+    if args.ai:
+        from src.ai_engine import fix_with_ai
+        from src.grammar import fix_sentence
+        target_text = args.text or "sendemigeliyorusn"
+        ai_res = fix_with_ai(target_text)
+        if ai_res:
+            print(ai_res)
+        else:
+            print("[!] NVIDIA API anahtarı ayarlanmamış veya bağlantı yok. Yerel motorla düzeltildi:", file=sys.stderr)
+            print(fix_sentence(target_text))
         return 0
 
     # Genel Metin Düzeltme

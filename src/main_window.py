@@ -31,6 +31,7 @@ from src.dictionary import (
     remove_personal_word
 )
 from src.autostart import set_autostart, is_autostart_enabled
+from src.ai_engine import fix_with_ai, test_nvidia_connection, AVAILABLE_MODELS
 
 SAMPLE_TEXTS = [
     ("Örnek 1: Bitişik ve Hatalı Kelimeler", "sendemigeliyorusn yarinaksam toplanalimmi"),
@@ -205,7 +206,7 @@ class MainWindow(QMainWindow):
     def __init__(self, tray_icon=None):
         super().__init__()
         self.tray_icon = tray_icon
-        self.setWindowTitle("🇹🇷 Türkçe Otomatik Düzeltici — Gelişmiş Stüdyo & Ayarlar (0-Token)")
+        self.setWindowTitle("🇹🇷 Türkçe Otomatik Düzeltici — Gelişmiş Stüdyo & NVIDIA AI")
         self.setMinimumSize(QSize(900, 620))
 
         # İkon yükle
@@ -277,6 +278,7 @@ class MainWindow(QMainWindow):
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
             "🤖 Otomatik Akıllı Algılama (Stil, Harf Düzeni ve İmlayı Kendi Anlar)",
+            "✨ Yapay Zeka ile Düzelt (NVIDIA NIM / Llama 3.3 70B)",
             "🇹🇷 Tam Akıllı Düzeltme (TDK + Segmenter + İmla + Noktalama)",
             "🔤 De-asciifier (ASCII ➜ Türkçe Harfler: c,g,i,o,s,u ➜ ç,ğ,ı,ö,ş,ü)",
             "🌐 Asciifier (Türkçe ➜ ASCII: ç,ğ,ı,ö,ş,ü ➜ c,g,i,o,s,u)",
@@ -421,36 +423,55 @@ class MainWindow(QMainWindow):
             mode_idx = self.mode_combo.currentIndex()
             t0 = time.time()
 
+            engine_label = "Yerel Motor"
             if mode_idx == 0:
                 # 🤖 Otomatik Akıllı Algılama
                 is_all_caps = raw_text.isupper() and len([c for c in raw_text if c.isalpha()]) > 2
                 result = fix_sentence(raw_text)
                 if is_all_caps:
                     result = turkish_upper(result)
+                engine_label = "Akıllı İmla & Yerel Motor"
             elif mode_idx == 1:
+                # ✨ Yapay Zeka ile Düzelt (NVIDIA NIM)
+                ai_res = fix_with_ai(raw_text)
+                if ai_res and ai_res.strip():
+                    result = ai_res.strip()
+                    engine_label = "NVIDIA NIM AI (Llama 3.3 70B)"
+                else:
+                    # Geri düşüş
+                    result = fix_sentence(raw_text)
+                    engine_label = "Yerel Motor (NVIDIA API Anahtarı Yok / Bağlantı Hatası)"
+            elif mode_idx == 2:
                 # Tam Akıllı Düzeltme
                 result = fix_sentence(raw_text)
-            elif mode_idx == 2:
+                engine_label = "TDK & Dilbilgisi Motoru"
+            elif mode_idx == 3:
                 # De-asciifier
                 result = deasciify_text(raw_text)
-            elif mode_idx == 3:
+                engine_label = "De-asciifier"
+            elif mode_idx == 4:
                 # Asciifier
                 result = asciify_text(raw_text)
-            elif mode_idx == 4:
+                engine_label = "Asciifier"
+            elif mode_idx == 5:
                 # Cümle Düzeni
                 sentences = raw_text.split(".")
                 result = ". ".join(turkish_capitalize(s.strip()) for s in sentences if s.strip())
                 if raw_text.endswith("."):
                     result += "."
-            elif mode_idx == 5:
+                engine_label = "Cümle Düzeni"
+            elif mode_idx == 6:
                 # TÜMÜ BÜYÜK
                 result = turkish_upper(raw_text)
-            elif mode_idx == 6:
+                engine_label = "Büyük Harf"
+            elif mode_idx == 7:
                 # tümü küçük
                 result = turkish_lower(raw_text)
-            elif mode_idx == 7:
+                engine_label = "Küçük Harf"
+            elif mode_idx == 8:
                 # Baş Harfleri Büyüt
                 result = " ".join(turkish_capitalize(w) for w in raw_text.split())
+                engine_label = "Başlık Düzeni"
             else:
                 result = fix_sentence(raw_text)
 
@@ -465,7 +486,7 @@ class MainWindow(QMainWindow):
             chars = len(result)
             words = len(result.split())
             self.output_stats_label.setText(f"{chars} karakter | {words} kelime")
-            self.status_msg_label.setText(f"İşlem tamamlandı ({elapsed_ms:.1f} ms) — 0 Token")
+            self.status_msg_label.setText(f"İşlem tamamlandı ({elapsed_ms:.1f} ms) — [{engine_label}]")
             self.status_msg_label.setStyleSheet("color: #10b981; font-weight: 500;")
 
             # İstatistik kaydı (güvenli blok, hata arayüzü çökertemez)
@@ -688,6 +709,48 @@ class MainWindow(QMainWindow):
         opt_group.setLayout(opt_layout)
         layout.addWidget(opt_group)
 
+        # NVIDIA AI Yapılandırması
+        ai_group = QGroupBox("✨ Yapay Zeka Desteği (NVIDIA NIM / Ücretsiz API)")
+        ai_layout = QFormLayout()
+
+        ai_info = QLabel("build.nvidia.com üzerinden aldığınız ücretsiz API anahtarı (nvapi-...) ile Llama 3.3 70B gibi dev modellerle bağlamsal düzeltme yapabilirsiniz. Boş bırakılırsa sistem 0 gecikmeli yerel motorla çalışır.")
+        ai_info.setWordWrap(True)
+        ai_info.setStyleSheet("color: #94a3b8; font-size: 11px; margin-bottom: 4px;")
+        ai_layout.addRow(ai_info)
+
+        key_box = QHBoxLayout()
+        self.ai_key_edit = QLineEdit()
+        self.ai_key_edit.setPlaceholderText("nvapi-...")
+        self.ai_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.ai_key_toggle_btn = QPushButton("👁️ Göster")
+        self.ai_key_toggle_btn.setObjectName("secondaryBtn")
+        self.ai_key_toggle_btn.clicked.connect(self.toggle_ai_key_visibility)
+        key_box.addWidget(self.ai_key_edit)
+        key_box.addWidget(self.ai_key_toggle_btn)
+        ai_layout.addRow("NVIDIA API Anahtarı:", key_box)
+
+        self.ai_model_combo = QComboBox()
+        for model_id, model_label in AVAILABLE_MODELS:
+            self.ai_model_combo.addItem(model_label, model_id)
+        ai_layout.addRow("AI Modeli:", self.ai_model_combo)
+
+        self.ai_tray_check = QCheckBox("Alt+Q kısayolunda öncelikli olarak NVIDIA AI motorunu kullan")
+        ai_layout.addRow(self.ai_tray_check)
+
+        test_box = QHBoxLayout()
+        self.test_ai_btn = QPushButton("🔌 API Bağlantısını Test Et")
+        self.test_ai_btn.setObjectName("secondaryBtn")
+        self.test_ai_btn.clicked.connect(self.test_ai_action)
+        self.ai_test_result_label = QLabel("")
+        self.ai_test_result_label.setStyleSheet("font-size: 11px;")
+        test_box.addWidget(self.test_ai_btn)
+        test_box.addWidget(self.ai_test_result_label)
+        test_box.addStretch()
+        ai_layout.addRow(test_box)
+
+        ai_group.setLayout(ai_layout)
+        layout.addWidget(ai_group)
+
         # Kaydet Butonu
         self.save_btn = QPushButton("💾 Ayarları Kaydet ve Uygula")
         self.save_btn.setObjectName("actionBtn")
@@ -695,6 +758,34 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.save_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
         layout.addStretch()
+
+    def toggle_ai_key_visibility(self):
+        if self.ai_key_edit.echoMode() == QLineEdit.EchoMode.Password:
+            self.ai_key_edit.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.ai_key_toggle_btn.setText("🔒 Gizle")
+        else:
+            self.ai_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.ai_key_toggle_btn.setText("👁️ Göster")
+
+    def test_ai_action(self):
+        key = self.ai_key_edit.text().strip()
+        if not key:
+            self.ai_test_result_label.setText("❌ Lütfen önce bir API anahtarı girin.")
+            self.ai_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+            return
+
+        model_id = self.ai_model_combo.currentData() or "meta/llama-3.3-70b-instruct"
+        self.ai_test_result_label.setText("⏳ Bağlantı test ediliyor...")
+        self.ai_test_result_label.setStyleSheet("color: #38bdf8; font-size: 11px;")
+        QApplication.processEvents()
+
+        ok, msg, latency = test_nvidia_connection(key, model_id)
+        if ok:
+            self.ai_test_result_label.setText(f"✅ {msg} ({latency} ms)")
+            self.ai_test_result_label.setStyleSheet("color: #10b981; font-size: 11px; font-weight: bold;")
+        else:
+            self.ai_test_result_label.setText(f"❌ {msg}")
+            self.ai_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
 
     def load_settings_into_ui(self):
         self.hotkey_edit.setKeySequence(QKeySequence(self.settings.get("hotkey", "alt+q")))
@@ -705,6 +796,14 @@ class MainWindow(QMainWindow):
         self.elongation_check.setChecked(self.settings.get("elongation_cleanup", True))
         current_theme = self.settings.get("theme", "dark")
         self.theme_combo.setCurrentIndex(0 if current_theme == "dark" else 1)
+
+        # AI Ayarları Yükle
+        self.ai_key_edit.setText(self.settings.get("nvidia_api_key", ""))
+        saved_model = self.settings.get("ai_model", "meta/llama-3.3-70b-instruct")
+        idx = self.ai_model_combo.findData(saved_model)
+        if idx >= 0:
+            self.ai_model_combo.setCurrentIndex(idx)
+        self.ai_tray_check.setChecked(self.settings.get("use_ai_in_tray", False))
 
     def save_settings_action(self):
         hotkey_str = self.hotkey_edit.keySequence().toString(QKeySequence.SequenceFormat.NativeText).lower()
@@ -721,7 +820,10 @@ class MainWindow(QMainWindow):
             "slang_expansion": self.slang_check.isChecked(),
             "elongation_cleanup": self.elongation_check.isChecked(),
             "contextual_correction": True,
-            "theme": theme
+            "theme": theme,
+            "nvidia_api_key": self.ai_key_edit.text().strip(),
+            "ai_model": self.ai_model_combo.currentData() or "meta/llama-3.3-70b-instruct",
+            "use_ai_in_tray": self.ai_tray_check.isChecked()
         }
 
         settings_manager.save_settings(new_settings)

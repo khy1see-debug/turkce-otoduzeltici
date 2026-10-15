@@ -15,6 +15,9 @@ DEFAULTS = {
     "slang_expansion": True,
     "elongation_cleanup": True,
     "contextual_correction": True,
+    "nvidia_api_key": "",
+    "ai_model": "meta/llama-3.3-70b-instruct",
+    "use_ai_in_tray": False,
 }
 
 def get_config_dir():
