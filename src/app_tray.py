@@ -8,7 +8,6 @@ import os
 import time
 import threading
 import pyperclip
-import keyboard
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt
@@ -35,35 +34,6 @@ refresh_personal_dictionary(force=True)
 # Initialize managers
 _stats_manager = StatisticsManager()
 _notification_manager = NotificationManager()
-
-
-def handle_ctrl_z():
-    """Handle Ctrl+Z key press to undo recent correction."""
-    global _last_correction_time, _last_correction_original, _last_correction_corrected
-
-    current_time = time.time()
-    if _last_correction_time > 0 and (current_time - _last_correction_time) <= 2.5:
-        if _last_correction_original and _last_correction_corrected:
-            self_learning.record_rejection(_last_correction_corrected)
-            _notification_manager.show_notification(
-                "↩️ Düzeltme Geri Alındı",
-                f"'{_last_correction_corrected}' ➜ '{_last_correction_original}'"
-            )
-
-        _last_correction_time = 0.0
-        _last_correction_original = ""
-        _last_correction_corrected = ""
-        return True
-
-    return False
-
-
-def setup_undo_detection():
-    """Set up global Ctrl+Z hook for undo detection."""
-    try:
-        keyboard.add_hotkey('ctrl+z', handle_ctrl_z)
-    except Exception as e:
-        print(f"Undo hook notice: {e}")
 
 
 def create_icon_image() -> QIcon:
@@ -128,16 +98,20 @@ def _parse_hotkey_string(hotkey_str: str) -> tuple[int, int]:
 class Win32GlobalHotkeyThread(threading.Thread):
     """
     Windows işletim sisteminde donanım düzeyinde güvenilir global kısayol dinleyicisi.
-    Windows API 'RegisterHotKey' kullanır; antivirüs/Windows Defender tarafından engellenmez,
-    hook zaman aşımına uğramaz ve her uygulamada (Not Defteri, Word, Chrome, Discord, Oyunlar) çalışır.
+    Windows API 'RegisterHotKey' kullanır; birden fazla kısayolu (Düzeltme: Alt+Q, Çeviri: Alt+W)
+    aynı donanım mesaj döngüsünde güvenle dinler.
     """
-    def __init__(self, hotkey_str: str, callback):
+    def __init__(self, *args):
         super().__init__(daemon=True)
-        self.hotkey_str = hotkey_str
-        self.callback = callback
-        self.hotkey_id = 1001
+        # hotkey_mappings: [(id, hotkey_str, callback), ...]
+        if len(args) == 1 and isinstance(args[0], list):
+            self.hotkey_mappings = args[0]
+        elif len(args) == 2:
+            self.hotkey_mappings = [(1001, args[0], args[1])]
+        else:
+            self.hotkey_mappings = []
         self.stop_event = threading.Event()
-        self.registered = False
+        self.registered_ids = []
 
     def run(self):
         if sys.platform != "win32":
@@ -146,142 +120,173 @@ class Win32GlobalHotkeyThread(threading.Thread):
         from ctypes import wintypes
         user32 = ctypes.windll.user32
 
-        mods, vk = _parse_hotkey_string(self.hotkey_str)
-        self.registered = bool(user32.RegisterHotKey(None, self.hotkey_id, mods, vk))
-        if not self.registered:
-            # Fallback: MOD_NOREPEAT olmadan dene
-            mods_without_norepeat = mods & ~0x4000
-            self.registered = bool(user32.RegisterHotKey(None, self.hotkey_id, mods_without_norepeat, vk))
+        callbacks = {}
+        for hid, hstr, cb in self.hotkey_mappings:
+            mods, vk = _parse_hotkey_string(hstr)
+            reg = bool(user32.RegisterHotKey(None, hid, mods, vk))
+            if not reg:
+                reg = bool(user32.RegisterHotKey(None, hid, mods & ~0x4000, vk))
+            if reg:
+                self.registered_ids.append(hid)
+                callbacks[hid] = cb
+                print(f"[+] Win32 Donanım Kısayolu Devrede: {hstr} (ID: {hid})")
+            else:
+                print(f"Win32 RegisterHotKey kaydedilemedi: {hstr} (ID: {hid})", file=sys.stderr)
 
-        if not self.registered:
-            print(f"Win32 RegisterHotKey kaydedilemedi: {self.hotkey_str}", file=sys.stderr)
-            return
-
-        print(f"[+] Win32 Donanım Kısayolu Aktif: {self.hotkey_str} (ID: {self.hotkey_id})")
         msg = wintypes.MSG()
         try:
             while not self.stop_event.is_set():
                 if user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):  # PM_REMOVE = 1
                     if msg.message == 0x0312:  # WM_HOTKEY
-                        if msg.wParam == self.hotkey_id:
-                            # Asenkron worker thread başlat ki Windows mesaj kuyruğu asla kilitlenmesin
-                            threading.Thread(target=self.callback, daemon=True).start()
+                        target_cb = callbacks.get(msg.wParam)
+                        if target_cb:
+                            threading.Thread(target=target_cb, daemon=True).start()
                     user32.TranslateMessage(ctypes.byref(msg))
                     user32.DispatchMessageW(ctypes.byref(msg))
                 else:
                     time.sleep(0.015)
         finally:
-            user32.UnregisterHotKey(None, self.hotkey_id)
+            for hid in self.registered_ids:
+                user32.UnregisterHotKey(None, hid)
 
     def stop(self):
         self.stop_event.set()
 
 
 def _send_win32_key_combination(ctrl_key: str):
-    """Windows'ta basılı olabilecek Alt/Shift tuşlarını serbest bırakarak güvenli Ctrl+C veya Ctrl+V gönderir."""
+    """Windows'ta basılı olabilecek tuşları serbest bırakarak güvenli Ctrl+C veya Ctrl+V gönderir."""
     if sys.platform == "win32":
         try:
             import ctypes
             user32 = ctypes.windll.user32
-            # 1. Alt, Ctrl, Shift tuşlarını serbest bırak (KEYUP = 2)
-            user32.keybd_event(0x12, 0, 2, 0)  # VK_MENU (Alt)
-            user32.keybd_event(0x11, 0, 2, 0)  # VK_CONTROL
-            user32.keybd_event(0x10, 0, 2, 0)  # VK_SHIFT
-            time.sleep(0.03)
+            # 1. Alt, Ctrl, Shift, Q tuşlarını donanım düzeyinde serbest bırak
+            user32.keybd_event(0x12, 0, 2, 0)  # VK_MENU (Alt) UP
+            user32.keybd_event(0x51, 0, 2, 0)  # 'Q' UP
+            user32.keybd_event(0x11, 0, 2, 0)  # VK_CONTROL UP
+            user32.keybd_event(0x10, 0, 2, 0)  # VK_SHIFT UP
+            time.sleep(0.02)
 
             # 2. Ctrl + key gönder
             vk_code = 0x43 if ctrl_key.lower() == 'c' else 0x56  # 0x43 = 'C', 0x56 = 'V'
             user32.keybd_event(0x11, 0, 0, 0)  # Ctrl DOWN
+            time.sleep(0.02)
             user32.keybd_event(vk_code, 0, 0, 0)  # Key DOWN
-            time.sleep(0.025)
+            time.sleep(0.03)
             user32.keybd_event(vk_code, 0, 2, 0)  # Key UP
+            time.sleep(0.02)
             user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
-            return
-        except Exception:
-            pass
-
-    # Fallback to keyboard module
-    try:
-        keyboard.release('alt')
-        time.sleep(0.03)
-        keyboard.send(f'ctrl+{ctrl_key}')
-    except Exception:
-        pass
+        except Exception as e:
+            print(f"Key send error: {e}")
 
 
 SENTINEL_CLIPBOARD = "\x00__TURKCE_COPY_SENTINEL__\x00"
 
 
-def correct_selected_text():
-    """Seçili metni kopyalar, otomatik stil ve imlayla düzeltip yerine yapıştırır."""
-    global correction_active, _last_correction_time, _last_correction_original, _last_correction_corrected
-    if not correction_active:
-        return
-
-    # 1. Kullanıcı parmağını Alt tuşundan çekene kadar bekle (maksimum 400ms)
+def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
+    """
+    Seçili metni yakalar. Kullanıcı fare ile metin seçmemişse,
+    akıllı otomasyon ile imlecin solundaki satırı (Shift+Home) otomatik seçip yakalar.
+    (orijinal_pano, yakalanan_metin) döner.
+    """
     if sys.platform == "win32":
         try:
             import ctypes
             user32 = ctypes.windll.user32
-            for _ in range(8):
-                if not (user32.GetAsyncKeyState(0x12) & 0x8000):  # Alt bırakıldı
+            # Parmaklar Alt/Ctrl/Q/W tuşlarından çekilene kadar bekle (maks 400ms)
+            for _ in range(10):
+                alt_down = bool(user32.GetAsyncKeyState(0x12) & 0x8000)
+                q_down = bool(user32.GetAsyncKeyState(0x51) & 0x8000)
+                w_down = bool(user32.GetAsyncKeyState(0x57) & 0x8000)
+                if not alt_down and not q_down and not w_down:
                     break
-                time.sleep(0.04)
-            # Donanım düzeyinde tuşları serbest bırak
+                time.sleep(0.035)
+            # Tuşları donanım düzeyinde serbest bırak
             user32.keybd_event(0x12, 0, 2, 0)  # Alt UP
+            user32.keybd_event(0x51, 0, 2, 0)  # Q UP
+            user32.keybd_event(0x57, 0, 2, 0)  # W UP
             user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
             user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
-            time.sleep(0.03)
+            time.sleep(0.02)
         except Exception:
             pass
 
-    # 2. Mevcut pano içeriğini güvenle yedekle
     try:
-        original_clipboard = pyperclip.paste()
+        orig = pyperclip.paste()
     except Exception:
-        original_clipboard = ""
+        orig = ""
 
     try:
-        # Pano içeriğini sentinel değer yap ki yeni kopyalananı kesin ayırt edelim
+        pyperclip.copy(sentinel)
+    except Exception:
+        pass
+
+    # 1. Standart Ctrl+C kopyalama denemesi
+    _send_win32_key_combination('c')
+    captured = ""
+    for _ in range(10):
+        time.sleep(0.035)
         try:
-            pyperclip.copy(SENTINEL_CLIPBOARD)
+            t = pyperclip.paste()
+            if t != sentinel and t.strip():
+                captured = t
+                break
         except Exception:
             pass
 
-        # 3. Ctrl+C gönder
-        _send_win32_key_combination('c')
+    # 2. Akıllı Satır Otomasyonu (Fareyle seçilmediyse imleçten satır başına kadar otomatik seç)
+    if not captured and sys.platform == "win32":
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            # Shift + Home (imleçten satır başına kadar seç)
+            user32.keybd_event(0x10, 0, 0, 0)  # Shift DOWN
+            time.sleep(0.015)
+            user32.keybd_event(0x24, 0, 1, 0)  # Home DOWN
+            time.sleep(0.02)
+            user32.keybd_event(0x24, 0, 3, 0)  # Home UP
+            time.sleep(0.015)
+            user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
+            time.sleep(0.03)
 
-        selected_text = ""
-        # Pano güncellenene kadar bekle (maksimum 400ms)
-        for _ in range(10):
-            time.sleep(0.04)
-            try:
+            _send_win32_key_combination('c')
+            for _ in range(8):
+                time.sleep(0.035)
                 t = pyperclip.paste()
-                if t != SENTINEL_CLIPBOARD and t.strip():
-                    selected_text = t
+                if t != sentinel and t.strip():
+                    captured = t
                     break
+        except Exception:
+            pass
+
+    return orig, captured
+
+
+def correct_selected_text():
+    """Seçili metni (veya o anki satırı) kopyalar, otomatik imla ve LLM ile düzeltip yerine yapıştırır."""
+    global correction_active, _last_correction_time, _last_correction_original, _last_correction_corrected
+    if not correction_active:
+        return
+
+    original_clipboard, selected_text = _capture_active_text()
+    if not selected_text or not selected_text.strip():
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
             except Exception:
                 pass
+        _notification_manager.show_notification(
+            "⚠️ Metin Bulunamadı",
+            "Lütfen düzeltmek istediğiniz metni seçin veya imleci satır sonuna getirin."
+        )
+        return
 
-        # 4. Eğer metin seçilmemişse kullanıcıyı BİLGİLENDİR!
-        if not selected_text or not selected_text.strip():
-            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
-                try:
-                    pyperclip.copy(original_clipboard)
-                except Exception:
-                    pass
-            _notification_manager.show_notification(
-                "⚠️ Metin Seçilmedi",
-                "Lütfen önce düzeltmek istediğiniz metni fare ile seçin ve ardından Alt+Q'ya basın."
-            )
-            return
-
-        # 5. Düzeltme Motoru (NVIDIA NIM AI veya Yerel Motor)
+    try:
+        # Düzeltme Motoru (NVIDIA NIM AI veya Yerel Motor)
         settings = settings_manager.load_settings()
         used_ai = False
         corrected_text = None
 
-        if settings.get("use_ai_in_tray", False):
+        if settings.get("use_ai_in_tray", True):
             try:
                 from src.ai_engine import fix_with_ai
                 ai_res = fix_with_ai(selected_text)
@@ -298,7 +303,7 @@ def correct_selected_text():
                 from src.turkish_case import turkish_upper
                 corrected_text = turkish_upper(corrected_text)
 
-        # 6. Sonucu Yapıştır
+        # Sonucu Yapıştır
         if corrected_text != selected_text:
             pyperclip.copy(corrected_text)
             time.sleep(0.04)
@@ -317,13 +322,12 @@ def correct_selected_text():
             if settings.get("sound_toggle", True):
                 _notification_manager.play_sound("success")
 
-            title = "✨ Metin Düzeltildi (NVIDIA AI)" if used_ai else "✨ Metin Düzeltildi"
+            title = "✨ Metin Düzeltildi (Yapay Zeka)" if used_ai else "✨ Metin Düzeltildi"
             _notification_manager.show_notification(
                 title,
                 f"{selected_text} ➜ {corrected_text}"
             )
 
-            # Hedef uygulamanın yapıştırmayı tüketmesini bekle, sonra panoyu eski haline döndür
             time.sleep(0.4)
             if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
                 try:
@@ -331,7 +335,6 @@ def correct_selected_text():
                 except Exception:
                     pass
         else:
-            # Metinde hata yoksa kullanıcıya bilgi ver
             if settings.get("sound_toggle", True):
                 _notification_manager.play_sound("info")
             _notification_manager.show_notification(
@@ -352,26 +355,91 @@ def correct_selected_text():
                 pass
 
 
+def translate_selected_text():
+    """Seçili metni (veya o anki satırı) kopyalar, NVIDIA AI ile TR ⇄ EN çevirip yerine yapıştırır."""
+    global correction_active
+    if not correction_active:
+        return
+
+    original_clipboard, selected_text = _capture_active_text()
+    if not selected_text or not selected_text.strip():
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+        _notification_manager.show_notification(
+            "⚠️ Metin Bulunamadı",
+            "Lütfen çevirmek istediğiniz metni seçin veya imleci satır sonuna getirin."
+        )
+        return
+
+    try:
+        from src.ai_engine import translate_with_ai
+        translated = translate_with_ai(selected_text, target_lang="auto")
+        if not translated or not translated.strip():
+            _notification_manager.show_notification(
+                "⚠️ Çeviri Başarısız",
+                "Yapay Zeka API yanıt vermedi veya metin güvenlik denetiminden geçemedi."
+            )
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            return
+
+        translated = translated.strip()
+        pyperclip.copy(translated)
+        time.sleep(0.04)
+        _send_win32_key_combination('v')
+
+        settings = settings_manager.load_settings()
+        if settings.get("sound_toggle", True):
+            _notification_manager.play_sound("success")
+
+        _notification_manager.show_notification(
+            "🌍 Akıllı Çeviri (TR ⇄ EN)",
+            f"{selected_text} ➜ {translated}"
+        )
+
+        time.sleep(0.4)
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Çeviri hatası: {e}")
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+
+
 class SystemTrayApp(QSystemTrayIcon):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.app_icon = create_icon_image()
         self.setIcon(self.app_icon)
-        self.setToolTip("Türkçe Otomatik Düzeltici (0-Token)")
+        self.setToolTip("Türkçe Otomatik Düzeltici (Alt+Q: Düzelt | Alt+W: Çevir)")
 
         _notification_manager.set_tray_icon(self)
+
+        # Ayarları yükle
+        self.settings = settings_manager.load_settings()
+        self.current_hotkey = self.settings.get("hotkey", "alt+q")
+        self._win32_hotkey_thread = None
+        self.main_window = None
 
         self.menu = QMenu()
         self.setup_menu()
         self.setContextMenu(self.menu)
         self.activated.connect(self.on_tray_activated)
 
-        # Ayarları yükle ve kısayolu kaydet
-        self.settings = settings_manager.load_settings()
-        self.current_hotkey = self.settings.get("hotkey", "alt+q")
-        self._win32_hotkey_thread = None
+        # Donanım kısayolunu sisteme kaydet
         self.register_hotkey(self.current_hotkey)
-        self.main_window = None
 
     def setup_menu(self):
         # Düzeltme Stüdyosu & Ayarlar
@@ -383,6 +451,19 @@ class SystemTrayApp(QSystemTrayIcon):
         self.personal_dict_action = QAction("📖 Kişisel Sözlüğü Aç", self)
         self.personal_dict_action.triggered.connect(self.show_personal_dictionary)
         self.menu.addAction(self.personal_dict_action)
+
+        # AI Modu Aç/Kapat (Hızlı Geçiş)
+        is_ai_on = self.settings.get("use_ai_in_tray", True)
+        self.toggle_ai_action = QAction("🤖 Yapay Zeka Modu (Gemini / NVIDIA)", self)
+        self.toggle_ai_action.setCheckable(True)
+        self.toggle_ai_action.setChecked(is_ai_on)
+        self.toggle_ai_action.triggered.connect(self.toggle_ai_mode)
+        self.menu.addAction(self.toggle_ai_action)
+
+        # Akıllı Çeviri Kısayol Bilgisi / Tetikleyici
+        self.translate_action = QAction("🌍 Akıllı Çeviri (Alt+W - TR ⇄ EN)", self)
+        self.translate_action.triggered.connect(lambda: threading.Thread(target=translate_selected_text, daemon=True).start())
+        self.menu.addAction(self.translate_action)
 
         self.menu.addSeparator()
 
@@ -433,6 +514,31 @@ class SystemTrayApp(QSystemTrayIcon):
             "Otomatik düzeltme aktif." if correction_active else "Otomatik düzeltme duraklatıldı."
         )
 
+    def toggle_ai_mode(self, checked):
+        """Kısayollar için AI modunu doğrudan tepsi menüsünden aç/kapat."""
+        self.settings = settings_manager.load_settings()
+        self.settings["use_ai_in_tray"] = checked
+        settings_manager.save_settings(self.settings)
+
+        # Stüdyo açık ise ayarlar penceresindeki kutucuğu da senkronize et
+        if self.main_window and hasattr(self.main_window, "ai_tray_check"):
+            self.main_window.ai_tray_check.setChecked(checked)
+
+        if hasattr(self, "toggle_ai_action") and self.toggle_ai_action.isChecked() != checked:
+            self.toggle_ai_action.setChecked(checked)
+
+        if checked:
+            prov = self.settings.get("ai_provider", "auto").upper()
+            _notification_manager.show_notification(
+                "🤖 Yapay Zeka Modu Devrede",
+                f"Kısayollar artık derin dil modelini ({prov}) kullanacak."
+            )
+        else:
+            _notification_manager.show_notification(
+                "⚡ Çevrimdışı 0-Token Modu",
+                "Kısayollar 1.68M+ kelimelik yerel Türkçe sözlük motoruna geçti."
+            )
+
     def exit_application(self):
         """Uygulamayı tamamen kapat."""
         if getattr(self, "_win32_hotkey_thread", None):
@@ -440,10 +546,6 @@ class SystemTrayApp(QSystemTrayIcon):
                 self._win32_hotkey_thread.stop()
             except Exception:
                 pass
-        try:
-            keyboard.unhook_all()
-        except Exception:
-            pass
         QApplication.quit()
 
     def on_tray_activated(self, reason):
@@ -452,7 +554,7 @@ class SystemTrayApp(QSystemTrayIcon):
             self.show_settings_window()
 
     def register_hotkey(self, hotkey_str: str):
-        """Global kısayol tuşunu sisteme bağla (Win32 Donanım API + Keyboard fallback)."""
+        """Global kısayol tuşlarını sisteme bağla (Win32 Donanım API - 100% Kararlı)."""
         if sys.platform == "win32":
             if getattr(self, "_win32_hotkey_thread", None):
                 try:
@@ -460,23 +562,13 @@ class SystemTrayApp(QSystemTrayIcon):
                 except Exception:
                     pass
                 self._win32_hotkey_thread = None
-            self._win32_hotkey_thread = Win32GlobalHotkeyThread(hotkey_str, correct_selected_text)
+            mappings = [
+                (1001, hotkey_str, correct_selected_text),
+                (1002, "alt+w", translate_selected_text)
+            ]
+            self._win32_hotkey_thread = Win32GlobalHotkeyThread(mappings)
             self._win32_hotkey_thread.start()
-
-        # Keyboard kütüphanesini de ek arka plan fallback olarak tut
-        try:
-            keyboard.remove_hotkey(self.current_hotkey)
-        except Exception:
-            pass
-
-        try:
-            keyboard.add_hotkey(
-                hotkey_str,
-                lambda: threading.Thread(target=correct_selected_text, daemon=True).start()
-            )
-            print(f"Global kısayol kaydedildi: {hotkey_str}")
-        except Exception as e:
-            print(f"Kısayol kaydetme hatası '{hotkey_str}': {e}")
+            print(f"[+] Win32 Donanım Kısayolları Devrede: {hotkey_str} (Düzeltme), Alt+W (Çeviri)")
 
         self.current_hotkey = hotkey_str
 
@@ -501,8 +593,6 @@ def _start_background_web_api():
 
 def main():
     """Tepsi uygulamasını başlat."""
-    setup_undo_detection()
-
     # Tarayıcı eklentisi için yerel REST API'yi arka plan daemon thread'i olarak başlat
     threading.Thread(target=_start_background_web_api, daemon=True).start()
 
@@ -517,7 +607,7 @@ def main():
 
     _notification_manager.show_notification(
         "🇹🇷 Türkçe Otomatik Düzeltici",
-        f"Çalışıyor! Herhangi bir metni seçip {tray_icon.current_hotkey.upper()} tuşuna basın."
+        f"Çalışıyor! Düzeltme: {tray_icon.current_hotkey.upper()} | Çeviri: ALT+W"
     )
 
     sys.exit(app.exec())

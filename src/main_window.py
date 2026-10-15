@@ -31,7 +31,15 @@ from src.dictionary import (
     remove_personal_word
 )
 from src.autostart import set_autostart, is_autostart_enabled
-from src.ai_engine import fix_with_ai, test_nvidia_connection, AVAILABLE_MODELS
+from src.ai_engine import (
+    fix_with_ai,
+    translate_with_ai,
+    test_nvidia_connection,
+    AVAILABLE_MODELS,
+    test_gemini_connection,
+    AVAILABLE_GEMINI_MODELS,
+    DEFAULT_GEMINI_MODEL
+)
 
 SAMPLE_TEXTS = [
     ("Örnek 1: Bitişik ve Hatalı Kelimeler", "sendemigeliyorusn yarinaksam toplanalimmi"),
@@ -278,14 +286,17 @@ class MainWindow(QMainWindow):
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
             "🤖 Otomatik Akıllı Algılama (Stil, Harf Düzeni ve İmlayı Kendi Anlar)",
-            "✨ Yapay Zeka ile Düzelt (NVIDIA NIM / Llama 3.2)",
+            "✨ Yapay Zeka ile Düzelt (Google Gemini / NVIDIA NIM)",
             "🇹🇷 Tam Akıllı Düzeltme (TDK + Segmenter + İmla + Noktalama)",
             "🔤 De-asciifier (ASCII ➜ Türkçe Harfler: c,g,i,o,s,u ➜ ç,ğ,ı,ö,ş,ü)",
             "🌐 Asciifier (Türkçe ➜ ASCII: ç,ğ,ı,ö,ş,ü ➜ c,g,i,o,s,u)",
             "🔠 Cümle Düzeni (İlk harfler büyük)",
             "🔠 TÜMÜ BÜYÜK HARF",
             "🔡 tümü küçük harf",
-            "🔠 Baş Harfleri Büyüt (Başlık Düzeni)"
+            "🔠 Baş Harfleri Büyüt (Başlık Düzeni)",
+            "🌍 Akıllı Çeviri (TR ⇄ EN Otomatik Algıla)",
+            "🇹🇷 ➜ 🇬🇧 Türkçe ➜ İngilizce Çeviri",
+            "🇬🇧 ➜ 🇹🇷 İngilizce ➜ Türkçe Çeviri"
         ])
         top_bar.addWidget(QLabel("Dönüşüm Modu:"))
         top_bar.addWidget(self.mode_combo, stretch=2)
@@ -432,15 +443,16 @@ class MainWindow(QMainWindow):
                     result = turkish_upper(result)
                 engine_label = "Akıllı İmla & Yerel Motor"
             elif mode_idx == 1:
-                # ✨ Yapay Zeka ile Düzelt (NVIDIA NIM)
+                # ✨ Yapay Zeka ile Düzelt (Google Gemini / NVIDIA NIM)
                 ai_res = fix_with_ai(raw_text)
                 if ai_res and ai_res.strip():
                     result = ai_res.strip()
-                    engine_label = "NVIDIA NIM AI (Llama 3.2)"
+                    prov = self.settings.get("ai_provider", "auto").upper()
+                    engine_label = f"Yapay Zeka Bulut Motoru ({prov})"
                 else:
                     # Geri düşüş
                     result = fix_sentence(raw_text)
-                    engine_label = "Yerel Motor (NVIDIA API Anahtarı Yok / Bağlantı Hatası)"
+                    engine_label = "Yerel 1.66M+ Motor (Çevrimdışı / API Bağlantısı Yok)"
             elif mode_idx == 2:
                 # Tam Akıllı Düzeltme
                 result = fix_sentence(raw_text)
@@ -472,6 +484,21 @@ class MainWindow(QMainWindow):
                 # Baş Harfleri Büyüt
                 result = " ".join(turkish_capitalize(w) for w in raw_text.split())
                 engine_label = "Başlık Düzeni"
+            elif mode_idx == 9:
+                # 🌍 Akıllı Çeviri (TR ⇄ EN)
+                ai_tr = translate_with_ai(raw_text, target_lang="auto")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "NVIDIA AI Akıllı Çeviri (TR ⇄ EN)"
+            elif mode_idx == 10:
+                # 🇹🇷 ➜ 🇬🇧 Türkçe ➜ İngilizce
+                ai_tr = translate_with_ai(raw_text, target_lang="en")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "NVIDIA AI Türkçe ➜ İngilizce Çeviri"
+            elif mode_idx == 11:
+                # 🇬🇧 ➜ 🇹🇷 İngilizce ➜ Türkçe
+                ai_tr = translate_with_ai(raw_text, target_lang="tr")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "NVIDIA AI İngilizce ➜ Türkçe Çeviri"
             else:
                 result = fix_sentence(raw_text)
 
@@ -679,13 +706,20 @@ class MainWindow(QMainWindow):
     def setup_settings_tab(self):
         layout = QVBoxLayout(self.settings_tab)
 
-        # Kısayol Tuşu
-        hotkey_group = QGroupBox("Global Kısayol Tuşu")
+        # Kısayol Tuşları & Otomasyon
+        hotkey_group = QGroupBox("Global Kısayol Tuşları & Otomasyon")
+        hotkey_vbox = QVBoxLayout()
         hotkey_layout = QHBoxLayout()
-        hotkey_layout.addWidget(QLabel("Metin Seçildiğinde Tetiklenecek Kısayol:"))
+        hotkey_layout.addWidget(QLabel("Metin Düzeltme Kısayolu:"))
         self.hotkey_edit = QKeySequenceEdit()
         hotkey_layout.addWidget(self.hotkey_edit)
-        hotkey_group.setLayout(hotkey_layout)
+        hotkey_vbox.addLayout(hotkey_layout)
+
+        hotkey_info = QLabel("💡 <b>Alt+Q:</b> İmla, bağlam ve TDK düzeltmesi | <b>Alt+W:</b> Anında Türkçe ⇄ İngilizce Akıllı Çeviri.<br><i>(Metni fareyle seçmeden de imleç satır sonundayken basabilirsiniz; satırı otomatik yakalar.)</i>")
+        hotkey_info.setWordWrap(True)
+        hotkey_info.setStyleSheet("color: #38bdf8; font-size: 11px; margin-top: 4px;")
+        hotkey_vbox.addWidget(hotkey_info)
+        hotkey_group.setLayout(hotkey_vbox)
         layout.addWidget(hotkey_group)
 
         # Genel Seçenekler
@@ -709,15 +743,50 @@ class MainWindow(QMainWindow):
         opt_group.setLayout(opt_layout)
         layout.addWidget(opt_group)
 
-        # NVIDIA AI Yapılandırması
-        ai_group = QGroupBox("✨ Yapay Zeka Desteği (NVIDIA NIM / Ücretsiz API)")
+        # Yapay Zeka Sağlayıcısı & Modeli
+        ai_group = QGroupBox("✨ Yapay Zeka Motorları (Google Gemini & NVIDIA NIM)")
         ai_layout = QFormLayout()
 
-        ai_info = QLabel("build.nvidia.com üzerinden aldığınız ücretsiz API anahtarı (nvapi-...) ile Llama 3.3 70B gibi dev modellerle bağlamsal düzeltme yapabilirsiniz. Boş bırakılırsa sistem 0 gecikmeli yerel motorla çalışır.")
+        ai_info = QLabel("Google Gemini veya NVIDIA API anahtarınızı girerek bulut tabanlı devasa modellerle bağlamsal imla düzeltmesi ve iki yönlü akıllı çeviri yapabilirsiniz. Boş bırakırsanız sistem 1.68M+ kelimelik ultra hızlı çevrimdışı yerel motorla çalışır.")
         ai_info.setWordWrap(True)
-        ai_info.setStyleSheet("color: #94a3b8; font-size: 11px; margin-bottom: 4px;")
+        ai_info.setStyleSheet("color: #94a3b8; font-size: 11px; margin-bottom: 6px;")
         ai_layout.addRow(ai_info)
 
+        self.ai_provider_combo = QComboBox()
+        self.ai_provider_combo.addItem("🤖 Otomatik Algıla (Gemini varsa Gemini, yoksa NVIDIA)", "auto")
+        self.ai_provider_combo.addItem("✨ Google Gemini API (Ultra Hızlı, Geniş Kota, Gemini 2.0)", "gemini")
+        self.ai_provider_combo.addItem("🟢 NVIDIA NIM API (Llama 3.2 11B / OSS)", "nvidia")
+        ai_layout.addRow("Öncelikli Yapay Zeka:", self.ai_provider_combo)
+
+        # Google Gemini Ayarları
+        gemini_box = QHBoxLayout()
+        self.gemini_key_edit = QLineEdit()
+        self.gemini_key_edit.setPlaceholderText("AIzaSy...")
+        self.gemini_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_key_toggle_btn = QPushButton("👁️ Göster")
+        self.gemini_key_toggle_btn.setObjectName("secondaryBtn")
+        self.gemini_key_toggle_btn.clicked.connect(self.toggle_gemini_key_visibility)
+        gemini_box.addWidget(self.gemini_key_edit)
+        gemini_box.addWidget(self.gemini_key_toggle_btn)
+        ai_layout.addRow("Google Gemini API Key:", gemini_box)
+
+        self.gemini_model_combo = QComboBox()
+        for model_id, model_label in AVAILABLE_GEMINI_MODELS:
+            self.gemini_model_combo.addItem(model_label, model_id)
+        ai_layout.addRow("Gemini Modeli:", self.gemini_model_combo)
+
+        test_gemini_box = QHBoxLayout()
+        self.test_gemini_btn = QPushButton("🔌 Gemini Bağlantısını Test Et")
+        self.test_gemini_btn.setObjectName("secondaryBtn")
+        self.test_gemini_btn.clicked.connect(self.test_gemini_action)
+        self.gemini_test_result_label = QLabel("")
+        self.gemini_test_result_label.setStyleSheet("font-size: 11px;")
+        test_gemini_box.addWidget(self.test_gemini_btn)
+        test_gemini_box.addWidget(self.gemini_test_result_label)
+        test_gemini_box.addStretch()
+        ai_layout.addRow(test_gemini_box)
+
+        # NVIDIA NIM Ayarları
         key_box = QHBoxLayout()
         self.ai_key_edit = QLineEdit()
         self.ai_key_edit.setPlaceholderText("nvapi-...")
@@ -732,13 +801,10 @@ class MainWindow(QMainWindow):
         self.ai_model_combo = QComboBox()
         for model_id, model_label in AVAILABLE_MODELS:
             self.ai_model_combo.addItem(model_label, model_id)
-        ai_layout.addRow("AI Modeli:", self.ai_model_combo)
-
-        self.ai_tray_check = QCheckBox("Alt+Q kısayolunda öncelikli olarak NVIDIA AI motorunu kullan")
-        ai_layout.addRow(self.ai_tray_check)
+        ai_layout.addRow("NVIDIA Modeli:", self.ai_model_combo)
 
         test_box = QHBoxLayout()
-        self.test_ai_btn = QPushButton("🔌 API Bağlantısını Test Et")
+        self.test_ai_btn = QPushButton("🔌 NVIDIA Bağlantısını Test Et")
         self.test_ai_btn.setObjectName("secondaryBtn")
         self.test_ai_btn.clicked.connect(self.test_ai_action)
         self.ai_test_result_label = QLabel("")
@@ -747,6 +813,9 @@ class MainWindow(QMainWindow):
         test_box.addWidget(self.ai_test_result_label)
         test_box.addStretch()
         ai_layout.addRow(test_box)
+
+        self.ai_tray_check = QCheckBox("Global Kısayollarda (Alt+Q / Alt+W) Yapay Zeka motorunu kullan (Kapalıysa 0-Token yerel motor çalışır)")
+        ai_layout.addRow(self.ai_tray_check)
 
         ai_group.setLayout(ai_layout)
         layout.addWidget(ai_group)
@@ -759,6 +828,14 @@ class MainWindow(QMainWindow):
 
         layout.addStretch()
 
+    def toggle_gemini_key_visibility(self):
+        if self.gemini_key_edit.echoMode() == QLineEdit.EchoMode.Password:
+            self.gemini_key_edit.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.gemini_key_toggle_btn.setText("🔒 Gizle")
+        else:
+            self.gemini_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.gemini_key_toggle_btn.setText("👁️ Göster")
+
     def toggle_ai_key_visibility(self):
         if self.ai_key_edit.echoMode() == QLineEdit.EchoMode.Password:
             self.ai_key_edit.setEchoMode(QLineEdit.EchoMode.Normal)
@@ -767,6 +844,26 @@ class MainWindow(QMainWindow):
             self.ai_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
             self.ai_key_toggle_btn.setText("👁️ Göster")
 
+    def test_gemini_action(self):
+        key = self.gemini_key_edit.text().strip()
+        if not key:
+            self.gemini_test_result_label.setText("❌ Lütfen önce bir Gemini API anahtarı girin.")
+            self.gemini_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+            return
+
+        model_id = self.gemini_model_combo.currentData() or "gemini-2.0-flash"
+        self.gemini_test_result_label.setText("⏳ Gemini bağlantısı test ediliyor...")
+        self.gemini_test_result_label.setStyleSheet("color: #38bdf8; font-size: 11px;")
+        QApplication.processEvents()
+
+        ok, msg, latency = test_gemini_connection(key, model_id)
+        if ok:
+            self.gemini_test_result_label.setText(f"✅ {msg} ({latency} ms)")
+            self.gemini_test_result_label.setStyleSheet("color: #10b981; font-size: 11px; font-weight: bold;")
+        else:
+            self.gemini_test_result_label.setText(f"❌ {msg}")
+            self.gemini_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+
     def test_ai_action(self):
         key = self.ai_key_edit.text().strip()
         if not key:
@@ -774,8 +871,8 @@ class MainWindow(QMainWindow):
             self.ai_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
             return
 
-        model_id = self.ai_model_combo.currentData() or "meta/llama-3.3-70b-instruct"
-        self.ai_test_result_label.setText("⏳ Bağlantı test ediliyor...")
+        model_id = self.ai_model_combo.currentData() or "meta/llama-3.2-11b-vision-instruct"
+        self.ai_test_result_label.setText("⏳ NVIDIA bağlantısı test ediliyor...")
         self.ai_test_result_label.setStyleSheet("color: #38bdf8; font-size: 11px;")
         QApplication.processEvents()
 
@@ -797,13 +894,25 @@ class MainWindow(QMainWindow):
         current_theme = self.settings.get("theme", "dark")
         self.theme_combo.setCurrentIndex(0 if current_theme == "dark" else 1)
 
-        # AI Ayarları Yükle
+        # AI Sağlayıcı & Gemini Ayarları
+        provider = self.settings.get("ai_provider", "auto")
+        p_idx = self.ai_provider_combo.findData(provider)
+        if p_idx >= 0:
+            self.ai_provider_combo.setCurrentIndex(p_idx)
+
+        self.gemini_key_edit.setText(self.settings.get("gemini_api_key", ""))
+        saved_gemini_model = self.settings.get("gemini_model", "gemini-2.0-flash")
+        g_idx = self.gemini_model_combo.findData(saved_gemini_model)
+        if g_idx >= 0:
+            self.gemini_model_combo.setCurrentIndex(g_idx)
+
+        # NVIDIA Ayarları
         self.ai_key_edit.setText(self.settings.get("nvidia_api_key", ""))
-        saved_model = self.settings.get("ai_model", "meta/llama-3.3-70b-instruct")
+        saved_model = self.settings.get("ai_model", "meta/llama-3.2-11b-vision-instruct")
         idx = self.ai_model_combo.findData(saved_model)
         if idx >= 0:
             self.ai_model_combo.setCurrentIndex(idx)
-        self.ai_tray_check.setChecked(self.settings.get("use_ai_in_tray", False))
+        self.ai_tray_check.setChecked(self.settings.get("use_ai_in_tray", True))
 
     def save_settings_action(self):
         hotkey_str = self.hotkey_edit.keySequence().toString(QKeySequence.SequenceFormat.NativeText).lower()
@@ -821,8 +930,11 @@ class MainWindow(QMainWindow):
             "elongation_cleanup": self.elongation_check.isChecked(),
             "contextual_correction": True,
             "theme": theme,
+            "ai_provider": self.ai_provider_combo.currentData() or "auto",
+            "gemini_api_key": self.gemini_key_edit.text().strip(),
+            "gemini_model": self.gemini_model_combo.currentData() or "gemini-2.0-flash",
             "nvidia_api_key": self.ai_key_edit.text().strip(),
-            "ai_model": self.ai_model_combo.currentData() or "meta/llama-3.3-70b-instruct",
+            "ai_model": self.ai_model_combo.currentData() or "meta/llama-3.2-11b-vision-instruct",
             "use_ai_in_tray": self.ai_tray_check.isChecked()
         }
 
@@ -834,9 +946,11 @@ class MainWindow(QMainWindow):
         if sys.platform == "win32":
             set_autostart(startup_enabled)
 
-        # Tepsi ikonundaki kısayolu güncelle
+        # Tepsi ikonundaki kısayolu ve AI modunu güncelle
         if self.tray_icon and hasattr(self.tray_icon, "update_hotkey"):
             self.tray_icon.update_hotkey(hotkey_str)
+        if self.tray_icon and hasattr(self.tray_icon, "toggle_ai_action"):
+            self.tray_icon.toggle_ai_action.setChecked(self.ai_tray_check.isChecked())
 
         QMessageBox.information(self, "Başarılı", "Ayarlar başarıyla kaydedildi.")
 

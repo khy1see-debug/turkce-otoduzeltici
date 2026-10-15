@@ -29,14 +29,31 @@ def build():
         return 1
 
     target_name = "turkce-otoduzeltici"
-    default_exe = os.path.join(base_dir, "dist", f"{target_name}.exe")
-    if os.path.exists(default_exe):
-        try:
-            with open(default_exe, "r+b"):
+    candidates = ["turkce-otoduzeltici", "turkce-otoduzeltici-v2", "turkce-otoduzeltici-v3"]
+    for cand in candidates:
+        exe_f = os.path.join(base_dir, "dist", f"{cand}.exe")
+        if os.path.exists(exe_f):
+            try:
+                with open(exe_f, "a+b"):
+                    pass
+                target_name = cand
+                break
+            except OSError:
+                continue
+        else:
+            target_name = cand
+            break
+
+    print(f"[*] Hedef Çıktı Dosyası: {target_name}.exe")
+
+    # Spec dosyasını temizle
+    for s_name in ["turkce-otoduzeltici.spec", "turkce-otoduzeltici-v2.spec", "turkce-otoduzeltici-v3.spec"]:
+        s_path = os.path.join(base_dir, s_name)
+        if os.path.exists(s_path):
+            try:
+                os.remove(s_path)
+            except OSError:
                 pass
-        except OSError:
-            target_name = "turkce-otoduzeltici-v2"
-            print(f"[!] {default_exe} şu anda çalışıyor, çıktı '{target_name}.exe' olarak derlenecek.")
 
     pyinstaller_cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -53,6 +70,8 @@ def build():
         "--hidden-import=regex",
         "--hidden-import=PyQt6",
         "--collect-all=src",
+        "--collect-all=wordfreq",
+        "--collect-all=regex",
         os.path.join(base_dir, "src", "desktop_entry.py")
     ]
 

@@ -1,5 +1,5 @@
 """
-1.170.000+ Kelimelik Devasa Türkçe Sözlük ve Frekans Tablosu (0-Token, Offline).
+1.660.000+ Kelimelik Devasa Türkçe Sözlük ve Frekans Tablosu (0-Token, Offline).
 Zemberek çekimleri, TDK resmi sözlüğü ve günlük konuşma dili ağırlıkları birleştirildi.
 """
 
@@ -128,7 +128,11 @@ def get_word_prob(word: str) -> float:
     if w in CRITICAL_GRAMMAR_WORDS:
         return math.log(CRITICAL_GRAMMAR_WORDS[w]) + (len(w) * 0.4)
 
-    freq = word_frequency(w, "tr")
+    try:
+        freq = word_frequency(w, "tr")
+    except Exception:
+        freq = 0.0
+
     if freq > 0:
         return math.log(freq) + (len(w) * 0.4)
     

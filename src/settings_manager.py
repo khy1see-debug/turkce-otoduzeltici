@@ -15,9 +15,12 @@ DEFAULTS = {
     "slang_expansion": True,
     "elongation_cleanup": True,
     "contextual_correction": True,
+    "ai_provider": "auto",
+    "gemini_api_key": "",
+    "gemini_model": "gemini-3.5-flash-lite",
     "nvidia_api_key": "",
-    "ai_model": "meta/llama-3.3-70b-instruct",
-    "use_ai_in_tray": False,
+    "ai_model": "stepfun-ai/step-5-preview",
+    "use_ai_in_tray": True,
 }
 
 def get_config_dir():
