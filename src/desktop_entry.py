@@ -10,6 +10,13 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if base_dir not in sys.path:
     sys.path.insert(0, base_dir)
 
+def excepthook(exc_type, exc_value, exc_tb):
+    import traceback
+    tb = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    print(f"Kritik Hata:\n{tb}", file=sys.stderr)
+
+sys.excepthook = excepthook
+
 def run():
     # Argüman kontrolü (CLI / Web / Parametreler)
     if len(sys.argv) > 1 and not sys.argv[1].startswith("-psn"):

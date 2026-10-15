@@ -14,7 +14,7 @@ from src.grammar import analyze_sentence
 from src.deasciifier import deasciify_text, asciify_text
 from src.turkish_case import turkish_lower, turkish_upper, turkish_capitalize
 
-HTML_TEMPLATE = """<!DOCTYPE html>
+HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -642,14 +642,18 @@ class CorrectionApiHandler(BaseHTTPRequestHandler):
                 if text.endswith("."):
                     result += "."
             else:
+                is_all_caps = text.isupper() and len([c for c in text if c.isalpha()]) > 2
                 analysis = analyze_sentence(text)
                 result = analysis["corrected"]
+                if is_all_caps:
+                    result = turkish_upper(result)
                 changes = analysis["changes"]
 
             elapsed_ms = round((time.time() - t0) * 1000, 2)
             self._send_json({
                 "ok": True,
                 "result": result,
+                "corrected": result,
                 "changes": changes,
                 "stats": {
                     "char_count": len(result),

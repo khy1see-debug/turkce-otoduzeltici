@@ -98,8 +98,40 @@ def create_icon_image() -> QIcon:
     return QIcon(pixmap)
 
 
+def _send_win32_key_combination(ctrl_key: str):
+    """Windows'ta basılı olabilecek Alt/Shift tuşlarını serbest bırakarak güvenli Ctrl+C veya Ctrl+V gönderir."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            # 1. Alt, Ctrl, Shift tuşlarını serbest bırak (KEYUP = 2)
+            user32.keybd_event(0x12, 0, 2, 0)  # VK_MENU (Alt)
+            user32.keybd_event(0x11, 0, 2, 0)  # VK_CONTROL
+            user32.keybd_event(0x10, 0, 2, 0)  # VK_SHIFT
+            time.sleep(0.04)
+
+            # 2. Ctrl + key gönder
+            vk_code = 0x43 if ctrl_key.lower() == 'c' else 0x56  # 0x43 = 'C', 0x56 = 'V'
+            user32.keybd_event(0x11, 0, 0, 0)  # Ctrl DOWN
+            user32.keybd_event(vk_code, 0, 0, 0)  # Key DOWN
+            time.sleep(0.03)
+            user32.keybd_event(vk_code, 0, 2, 0)  # Key UP
+            user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
+            return
+        except Exception:
+            pass
+
+    # Fallback to keyboard module
+    try:
+        keyboard.release('alt')
+        time.sleep(0.04)
+        keyboard.send(f'ctrl+{ctrl_key}')
+    except Exception:
+        pass
+
+
 def correct_selected_text():
-    """Get selected text, correct it, and replace the selection."""
+    """Seçili metni kopyalar, otomatik stil ve imlayla düzeltip yerine yapıştırır."""
     global correction_active, _last_correction_time, _last_correction_original, _last_correction_corrected
     if not correction_active:
         return
@@ -111,31 +143,57 @@ def correct_selected_text():
         original_clipboard = ""
 
     try:
-        # Seçili metni panoya kopyala (Ctrl+C)
-        keyboard.send('ctrl+c')
-        time.sleep(0.08)
-        selected_text = pyperclip.paste()
+        # Önce panoyu temizle ki yeni kopyalanan metni kesin ayırt edebilelim
+        try:
+            pyperclip.copy("")
+        except Exception:
+            pass
+
+        # Seçili metni panoya kopyala (Alt tuşunu serbest bırakıp Ctrl+C gönder)
+        _send_win32_key_combination('c')
+
+        selected_text = ""
+        # Pano güncellenene kadar maksimum 300ms bekle (Chrome/Word/Discord gecikmesi)
+        for _ in range(6):
+            time.sleep(0.05)
+            try:
+                t = pyperclip.paste()
+                if t and t.strip():
+                    selected_text = t
+                    break
+            except Exception:
+                pass
 
         if not selected_text or not selected_text.strip():
+            # Kullanıcı metin seçmemişse orijinal panoyu geri yükle
+            if original_clipboard:
+                pyperclip.copy(original_clipboard)
             return
 
-        # Metni akıllı dilbilgisi motoru ile düzelt
+        # Akıllı Harf & İmla Tespiti (Auto-Detect)
+        is_all_caps = selected_text.isupper() and len([c for c in selected_text if c.isalpha()]) > 2
         corrected_text = fix_sentence(selected_text)
+        if is_all_caps:
+            from src.turkish_case import turkish_upper
+            corrected_text = turkish_upper(corrected_text)
 
         if corrected_text != selected_text:
             # Düzeltilmiş metni panoya koyup yapıştır (Ctrl+V)
             pyperclip.copy(corrected_text)
             time.sleep(0.05)
-            keyboard.send('ctrl+v')
+            _send_win32_key_combination('v')
 
             # Geri alma takibi için kaydet
             _last_correction_time = time.time()
             _last_correction_original = selected_text
             _last_correction_corrected = corrected_text
 
-            # İstatistik ve Öz-öğrenmeye kaydet
-            _stats_manager.record_correction(selected_text, corrected_text)
-            self_learning.record_correction(selected_text, corrected_text)
+            # İstatistik ve Öz-öğrenmeye kaydet (güvenli blok)
+            try:
+                _stats_manager.record_correction(selected_text, corrected_text)
+                self_learning.record_correction(selected_text, corrected_text)
+            except Exception:
+                pass
 
             # Bildirim ve ses
             settings = settings_manager.load_settings()
@@ -147,10 +205,13 @@ def correct_selected_text():
                 f"{selected_text} ➜ {corrected_text}"
             )
 
-            # Bir süre sonra orijinal panoyu geri yükle
-            time.sleep(0.15)
+            # Hedef uygulamanın yapıştırmayı tamamlaması için bekle, ardından panoyu geri yükle
+            time.sleep(0.3)
             if original_clipboard:
-                pyperclip.copy(original_clipboard)
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
         else:
             settings = settings_manager.load_settings()
             if settings.get("sound_toggle", True):
@@ -160,6 +221,11 @@ def correct_selected_text():
                 f"'{selected_text}' imlasında hata bulunamadı.",
                 duration_sec=2
             )
+            if original_clipboard:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
     except Exception as e:
         print(f"Düzeltme hatası: {e}")
         if original_clipboard:

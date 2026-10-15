@@ -276,6 +276,7 @@ class MainWindow(QMainWindow):
         # Mod Seçici
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
+            "🤖 Otomatik Akıllı Algılama (Stil, Harf Düzeni ve İmlayı Kendi Anlar)",
             "🇹🇷 Tam Akıllı Düzeltme (TDK + Segmenter + İmla + Noktalama)",
             "🔤 De-asciifier (ASCII ➜ Türkçe Harfler: c,g,i,o,s,u ➜ ç,ğ,ı,ö,ş,ü)",
             "🌐 Asciifier (Türkçe ➜ ASCII: ç,ğ,ı,ö,ş,ü ➜ c,g,i,o,s,u)",
@@ -411,58 +412,73 @@ class MainWindow(QMainWindow):
         self.apply_transformation(record_stats=True)
 
     def apply_transformation(self, record_stats: bool = True):
-        raw_text = self.input_edit.toPlainText().strip()
-        if not raw_text:
-            self.output_edit.clear()
-            return
+        try:
+            raw_text = self.input_edit.toPlainText().strip()
+            if not raw_text:
+                self.output_edit.clear()
+                return
 
-        mode_idx = self.mode_combo.currentIndex()
-        t0 = time.time()
+            mode_idx = self.mode_combo.currentIndex()
+            t0 = time.time()
 
-        if mode_idx == 0:
-            # Tam Akıllı Düzeltme
-            result = fix_sentence(raw_text)
-        elif mode_idx == 1:
-            # De-asciifier
-            result = deasciify_text(raw_text)
-        elif mode_idx == 2:
-            # Asciifier
-            result = asciify_text(raw_text)
-        elif mode_idx == 3:
-            # Cümle Düzeni
-            sentences = raw_text.split(".")
-            result = ". ".join(turkish_capitalize(s.strip()) for s in sentences if s.strip())
-            if raw_text.endswith("."):
-                result += "."
-        elif mode_idx == 4:
-            # TÜMÜ BÜYÜK
-            result = turkish_upper(raw_text)
-        elif mode_idx == 5:
-            # tümü küçük
-            result = turkish_lower(raw_text)
-        elif mode_idx == 6:
-            # Baş Harfleri Büyüt
-            result = " ".join(turkish_capitalize(w) for w in raw_text.split())
-        else:
-            result = fix_sentence(raw_text)
+            if mode_idx == 0:
+                # 🤖 Otomatik Akıllı Algılama
+                is_all_caps = raw_text.isupper() and len([c for c in raw_text if c.isalpha()]) > 2
+                result = fix_sentence(raw_text)
+                if is_all_caps:
+                    result = turkish_upper(result)
+            elif mode_idx == 1:
+                # Tam Akıllı Düzeltme
+                result = fix_sentence(raw_text)
+            elif mode_idx == 2:
+                # De-asciifier
+                result = deasciify_text(raw_text)
+            elif mode_idx == 3:
+                # Asciifier
+                result = asciify_text(raw_text)
+            elif mode_idx == 4:
+                # Cümle Düzeni
+                sentences = raw_text.split(".")
+                result = ". ".join(turkish_capitalize(s.strip()) for s in sentences if s.strip())
+                if raw_text.endswith("."):
+                    result += "."
+            elif mode_idx == 5:
+                # TÜMÜ BÜYÜK
+                result = turkish_upper(raw_text)
+            elif mode_idx == 6:
+                # tümü küçük
+                result = turkish_lower(raw_text)
+            elif mode_idx == 7:
+                # Baş Harfleri Büyüt
+                result = " ".join(turkish_capitalize(w) for w in raw_text.split())
+            else:
+                result = fix_sentence(raw_text)
 
-        elapsed_ms = (time.time() - t0) * 1000
+            elapsed_ms = (time.time() - t0) * 1000
 
-        # Diff görünümü veya düz metin
-        if self.diff_check.isChecked():
-            self.render_diff(raw_text, result)
-        else:
-            self.output_edit.setPlainText(result)
+            # Diff görünümü veya düz metin
+            if self.diff_check.isChecked():
+                self.render_diff(raw_text, result)
+            else:
+                self.output_edit.setPlainText(result)
 
-        chars = len(result)
-        words = len(result.split())
-        self.output_stats_label.setText(f"{chars} karakter | {words} kelime")
-        self.status_msg_label.setText(f"İşlem tamamlandı ({elapsed_ms:.1f} ms) — 0 Token")
+            chars = len(result)
+            words = len(result.split())
+            self.output_stats_label.setText(f"{chars} karakter | {words} kelime")
+            self.status_msg_label.setText(f"İşlem tamamlandı ({elapsed_ms:.1f} ms) — 0 Token")
+            self.status_msg_label.setStyleSheet("color: #10b981; font-weight: 500;")
 
-        # İstatistik kaydı
-        if record_stats and raw_text != result:
-            self.stats_manager.record_correction(raw_text, result)
-            self.update_dashboard()
+            # İstatistik kaydı (güvenli blok, hata arayüzü çökertemez)
+            if record_stats and raw_text != result:
+                try:
+                    self.stats_manager.record_correction(raw_text, result)
+                    self.update_dashboard()
+                except Exception as stat_err:
+                    print(f"İstatistik güncelleme uyarısı: {stat_err}")
+        except Exception as e:
+            self.status_msg_label.setText(f"İşlem Hatası: {e}")
+            self.status_msg_label.setStyleSheet("color: #ef4444; font-weight: bold;")
+            print(f"Arayüz düzeltme hatası: {e}")
 
     def toggle_diff_view(self, checked: bool):
         raw = self.input_edit.toPlainText()
@@ -736,6 +752,13 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    def qt_excepthook(exc_type, exc_value, exc_tb):
+        import traceback
+        tb = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        print(f"Arayüz Hatası:\n{tb}", file=sys.stderr)
+
+    sys.excepthook = qt_excepthook
+
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)

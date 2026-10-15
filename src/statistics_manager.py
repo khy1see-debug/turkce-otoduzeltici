@@ -29,9 +29,13 @@ class StatisticsManager:
         self.create_tables()
 
     def connect(self):
-        """Connect to the SQLite database."""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        """Connect to the SQLite database with concurrency timeout and WAL mode."""
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=15.0)
         self.conn.row_factory = sqlite3.Row
+        try:
+            self.conn.execute("PRAGMA journal_mode=WAL")
+        except Exception:
+            pass
 
     def create_tables(self):
         """Create the necessary tables if they don't exist."""

@@ -32,10 +32,19 @@ class SelfLearningManager:
         self._pending_corrections: Dict[str, float] = {}  # word -> timestamp
         self._init_database()
 
+    def _get_connection(self) -> sqlite3.Connection:
+        """Create an SQLite connection with concurrency timeout and WAL mode."""
+        conn = sqlite3.connect(str(self.db_path), timeout=15.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except Exception:
+            pass
+        return conn
+
     def _init_database(self):
         """Initialize the SQLite database for self-learning data."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             try:
                 conn.execute('''
                     CREATE TABLE IF NOT EXISTS word_learning (
@@ -73,7 +82,7 @@ class SelfLearningManager:
             return  # No actual correction made
 
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             try:
                 conn.execute('''
                     INSERT INTO correction_events (original_text, corrected_text)
@@ -102,7 +111,7 @@ class SelfLearningManager:
             word: The word that was corrected to
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             try:
                 # Update the most recent correction event for this word
                 conn.execute('''
@@ -138,7 +147,7 @@ class SelfLearningManager:
             word: The word that was rejected (undo'd)
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             try:
                 # Update the most recent correction event for this word
                 conn.execute('''
@@ -197,7 +206,7 @@ class SelfLearningManager:
     def get_learned_words(self) -> list:
         """Get list of words learned through self-learning."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             try:
                 cursor = conn.execute(
                     'SELECT word FROM word_learning WHERE learned = 1 ORDER BY word'
@@ -214,7 +223,7 @@ class SelfLearningManager:
             Tuple of (acceptance_count, rejection_count)
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             try:
                 cursor = conn.execute(
                     'SELECT acceptance_count, rejection_count FROM word_learning WHERE word = ?',
@@ -230,7 +239,7 @@ class SelfLearningManager:
     def cleanup_old_records(self, days: int = 30):
         """Clean up old correction events."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             try:
                 conn.execute('''
                     DELETE FROM correction_events
