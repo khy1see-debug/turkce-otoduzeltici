@@ -22,6 +22,7 @@ from src.harmony import fix_question_particle, get_genitive_suffix
 from src.slang import expand_slang, normalize_elongation, TDK_COMMON_MISSPELLINGS
 from src.syntax import fix_word_order
 from src.turkish_case import turkish_lower, turkish_upper, turkish_capitalize
+from src.tdk_rules import apply_tdk_rules
 
 QUESTION_PARTICLES = {
     "mi", "mı", "mu", "mü",
@@ -95,6 +96,11 @@ def analyze_sentence(raw_text: str) -> Dict[str, Any]:
 
     # 1. Kod bloklarını maskele
     masked_text, code_blocks = _extract_code_blocks(raw_text)
+
+    # 1.1. TDK Kuralları (Özel İsimler, Kısaltmalar, Fıstıkçı Şahap, Sayı/Saat İmlası)
+    tdk_normalized = apply_tdk_rules(masked_text)
+    if tdk_normalized != masked_text:
+        masked_text = tdk_normalized
 
     if refresh_personal_dictionary():
         correct_word.cache_clear()

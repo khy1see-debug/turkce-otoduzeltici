@@ -30,6 +30,7 @@ from src.dictionary import (
     add_personal_word,
     remove_personal_word
 )
+from src.autostart import set_autostart, is_autostart_enabled
 
 SAMPLE_TEXTS = [
     ("Örnek 1: Bitişik ve Hatalı Kelimeler", "sendemigeliyorusn yarinaksam toplanalimmi"),
@@ -681,7 +682,8 @@ class MainWindow(QMainWindow):
 
     def load_settings_into_ui(self):
         self.hotkey_edit.setKeySequence(QKeySequence(self.settings.get("hotkey", "alt+q")))
-        self.startup_check.setChecked(self.settings.get("startup_toggle", False))
+        reg_autostart = is_autostart_enabled() if sys.platform == "win32" else self.settings.get("startup_toggle", False)
+        self.startup_check.setChecked(reg_autostart)
         self.sound_check.setChecked(self.settings.get("sound_toggle", True))
         self.slang_check.setChecked(self.settings.get("slang_expansion", True))
         self.elongation_check.setChecked(self.settings.get("elongation_cleanup", True))
@@ -694,10 +696,11 @@ class MainWindow(QMainWindow):
             hotkey_str = "alt+q"
 
         theme = "dark" if self.theme_combo.currentIndex() == 0 else "light"
+        startup_enabled = self.startup_check.isChecked()
 
         new_settings = {
             "hotkey": hotkey_str,
-            "startup_toggle": self.startup_check.isChecked(),
+            "startup_toggle": startup_enabled,
             "sound_toggle": self.sound_check.isChecked(),
             "slang_expansion": self.slang_check.isChecked(),
             "elongation_cleanup": self.elongation_check.isChecked(),
@@ -708,6 +711,10 @@ class MainWindow(QMainWindow):
         settings_manager.save_settings(new_settings)
         self.settings = new_settings
         self.apply_theme(theme)
+
+        # Windows Başlangıcında Otomatik Başlatma Registry Güncellemesi
+        if sys.platform == "win32":
+            set_autostart(startup_enabled)
 
         # Tepsi ikonundaki kısayolu güncelle
         if self.tray_icon and hasattr(self.tray_icon, "update_hotkey"):

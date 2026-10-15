@@ -108,3 +108,38 @@ def test_analyze_sentence():
     assert analysis["corrected"] == "Herkes bir şey biliyor."
     assert len(analysis["changes"]) >= 2
     assert any("TDK" in c["rule"] or "Chat" in c["rule"] for c in analysis["changes"])
+
+def test_tdk_proper_nouns_and_acronyms():
+    from src.tdk_rules import apply_tdk_rules
+    # Özel isimler ve kesme işareti
+    assert "Ankara'da" in apply_tdk_rules("ankarada yasiyorum")
+    assert "Ahmet'e" in apply_tdk_rules("ahmete verdim")
+    # TDK Kısaltma kuralı ('K' harfi 'ke' okunur)
+    assert "TDK'ye" in apply_tdk_rules("TDKya basvurduk")
+    assert "SGK'ye" in apply_tdk_rules("SGKya gittim")
+
+def test_tdk_consonant_assimilation():
+    from src.tdk_rules import apply_tdk_rules
+    # Fıstıkçı Şahap sertleşmesi
+    assert "kitapçı" in apply_tdk_rules("kitapcı")
+    assert "ağaçta" in apply_tdk_rules("ağaçda")
+    assert "sokakta" in apply_tdk_rules("sokakda")
+    assert "yaptı" in apply_tdk_rules("yapdı")
+
+def test_tdk_colloquial_reduction():
+    from src.tdk_rules import apply_tdk_rules
+    assert "yapacak" in apply_tdk_rules("yapıcak")
+    assert "yapacağım" in apply_tdk_rules("yapıcam")
+    assert "biliyor" in apply_tdk_rules("biliyo")
+    assert "geliyorum" in apply_tdk_rules("geliyom")
+
+def test_tdk_time_and_number_grammar():
+    from src.tdk_rules import apply_tdk_rules
+    # Saat başlarında dakikaya değil saate göre ek: 14.00'te
+    assert "14.00'te" in apply_tdk_rules("14:00 da")
+    # Dakikalı saatler
+    assert "14.30'da" in apply_tdk_rules("14:30 da")
+    # Yıl ve sayılar
+    assert "2026'da" in apply_tdk_rules("2026 de")
+    assert "1923'te" in apply_tdk_rules("1923 de")
+

@@ -49,12 +49,17 @@ class NotificationManager:
         else:
             print(f"[Bildirim] {title}: {message}")
 
-    def play_sound(self):
+    def play_sound(self, sound_type: str = "success"):
         """Play a subtle system notification sound if sound is enabled."""
         if not SOUND_AVAILABLE:
             return
         try:
-            # Yumuşak sistem bildirimi sesi (1200 Hz, 80ms)
-            winsound.Beep(1200, 80)
+            if sound_type == "success":
+                # Başarılı düzeltme: Yumuşak yükselen bildirim (1000Hz 60ms + 1400Hz 80ms)
+                winsound.Beep(1000, 60)
+                winsound.Beep(1400, 80)
+            else:
+                # Zaten doğru / bilgi: Tek hafif tık (1200Hz 50ms)
+                winsound.Beep(1200, 50)
         except Exception:
             pass

@@ -28,9 +28,19 @@ def build():
         print(f"Hata: Sözlük dosyası bulunamadı: {data_path}")
         return 1
 
+    target_name = "turkce-otoduzeltici"
+    default_exe = os.path.join(base_dir, "dist", f"{target_name}.exe")
+    if os.path.exists(default_exe):
+        try:
+            with open(default_exe, "r+b"):
+                pass
+        except OSError:
+            target_name = "turkce-otoduzeltici-v2"
+            print(f"[!] {default_exe} şu anda çalışıyor, çıktı '{target_name}.exe' olarak derlenecek.")
+
     pyinstaller_cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name=turkce-otoduzeltici",
+        f"--name={target_name}",
         "--windowed",       # Konsol penceresini gizle (GUI & Tray için)
         "--onefile",        # Tek tıkla çalışan bağımsız tek dosya
         "--noconfirm",
@@ -54,7 +64,7 @@ def build():
 
     ret = subprocess.call(pyinstaller_cmd)
     if ret == 0:
-        exe_path = os.path.join(base_dir, "dist", "turkce-otoduzeltici.exe")
+        exe_path = os.path.join(base_dir, "dist", f"{target_name}.exe")
         print("\n" + "=" * 65)
         print("[+] Derleme Basarili!")
         print(f"[>] Calistirilabilir EXE: {exe_path}")

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Türkçe Otomatik Düzeltici</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .status-online { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; }
+    .status-offline { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #ef4444; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dot-online { background: #22c55e; }
+    .dot-offline { background: #ef4444; }
+    textarea {
+      width: 100%;
+      height: 75px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #f1f5f9;
+      padding: 8px;
+      font-size: 12px;
+      resize: vertical;
+      margin-bottom: 8px;
+      outline: none;
+    }
+    textarea:focus { border-color: #38bdf8; }
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    select {
+      flex: 1;
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 11px;
+      outline: none;
+    }
+    button.btn-primary {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.btn-primary:hover { opacity: 0.9; }
+    .output-box {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 12px;
+      min-height: 55px;
+      color: #38bdf8;
+      word-break: break-word;
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      font-size: 10px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: white; border-color: #475569; }
+    .footer {
+      margin-top: 10px;
+      font-size: 10px;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">🇹🇷 Türkçe Düzeltici</div>
+    <div id="statusBadge" class="status-badge status-offline">
+      <div id="statusDot" class="dot dot-offline"></div>
+      <span id="statusText">Bağlanıyor...</span>
+    </div>
+  </div>
+
+  <textarea id="inputText" placeholder="Metninizi yazın veya yapıştırın..."></textarea>
+
+  <div class="controls">
+    <select id="modeSelect">
+      <option value="fix">TDK İmla & Düzeltme</option>
+      <option value="deasciify">De-asciifier (Türkçeleştir)</option>
+      <option value="asciify">Asciifier (İngilizceleştir)</option>
+      <option value="upper">BÜYÜK HARF (İ/I Uyumlu)</option>
+      <option value="lower">küçük harf (İ/I Uyumlu)</option>
+    </select>
+    <button id="correctBtn" class="btn-primary">Düzelt</button>
+  </div>
+
+  <div class="output-box" id="outputBox">
+    <span id="outputText" style="color: #64748b;">Düzeltilmiş metin burada görünecektir...</span>
+    <button class="copy-btn" id="copyBtn" style="display: none;">Kopyala</button>
+  </div>
+
+  <div class="footer">
+    <span>Kısayol: <b>Alt+Shift+Q</b></span>
+    <span>%100 Yerel / 0-Token</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

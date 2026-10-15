@@ -6,6 +6,7 @@ clipboard preservation, undo detection (Ctrl+Z), and tray menu.
 import sys
 import os
 import time
+import threading
 import pyperclip
 import keyboard
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
@@ -139,7 +140,7 @@ def correct_selected_text():
             # Bildirim ve ses
             settings = settings_manager.load_settings()
             if settings.get("sound_toggle", True):
-                _notification_manager.play_sound()
+                _notification_manager.play_sound("success")
 
             _notification_manager.show_notification(
                 "✨ Metin Düzeltildi",
@@ -150,6 +151,15 @@ def correct_selected_text():
             time.sleep(0.15)
             if original_clipboard:
                 pyperclip.copy(original_clipboard)
+        else:
+            settings = settings_manager.load_settings()
+            if settings.get("sound_toggle", True):
+                _notification_manager.play_sound("info")
+            _notification_manager.show_notification(
+                "✓ İmla Doğru",
+                f"'{selected_text}' imlasında hata bulunamadı.",
+                duration_sec=2
+            )
     except Exception as e:
         print(f"Düzeltme hatası: {e}")
         if original_clipboard:
@@ -274,9 +284,23 @@ class SystemTrayApp(QSystemTrayIcon):
             settings_manager.save_settings(self.settings)
 
 
+def _start_background_web_api():
+    """Tarayıcı eklentisi ve harici araçlar için yerel REST API'yi arka planda başlatır."""
+    try:
+        from http.server import HTTPServer
+        from src.web import CorrectionApiHandler
+        server = HTTPServer(("127.0.0.1", 8765), CorrectionApiHandler)
+        server.serve_forever()
+    except Exception:
+        pass
+
+
 def main():
     """Tepsi uygulamasını başlat."""
     setup_undo_detection()
+
+    # Tarayıcı eklentisi için yerel REST API'yi arka plan daemon thread'i olarak başlat
+    threading.Thread(target=_start_background_web_api, daemon=True).start()
 
     app = QApplication.instance()
     if app is None:
