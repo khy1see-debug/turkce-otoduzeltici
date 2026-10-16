@@ -51,17 +51,24 @@ sys.excepthook = excepthook
 import threading
 threading.excepthook = lambda args: excepthook(args.exc_type, args.exc_value, args.exc_traceback)
 
+_single_instance_mutex = None
+
 def ensure_single_instance():
-    """Çakışan veya önceki kopya süreçleri temizler, tek bir örneğin çalışmasını garanti eder."""
+    """Win32 Named Mutex ile uygulamanın tek bir örneğinin çalışmasını sağlar."""
+    global _single_instance_mutex
     if sys.platform != "win32":
-        return
-    import subprocess
-    current_pid = os.getpid()
+        return True
     try:
-        cmd = f"Get-Process turkce-otoduzeltici -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {current_pid} }} | Stop-Process -Force"
-        subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, timeout=5)
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        mutex_name = "Global\\TurkceOtomatikDuzeltici_App_Mutex_v1"
+        _single_instance_mutex = kernel32.CreateMutexW(None, False, mutex_name)
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            print("[!] Halihazırda çalışan bir Türkçe Otomatik Düzeltici kopyası mevcut. Çıkılıyor.")
+            sys.exit(0)
+        return True
     except Exception:
-        pass
+        return True
 
 def run():
     # Argüman kontrolü (CLI / Web / Parametreler)
