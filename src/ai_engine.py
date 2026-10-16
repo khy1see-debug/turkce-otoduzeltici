@@ -171,9 +171,8 @@ def call_gemini_api(
                         content = parts[0].get("text", "").strip()
                         if content.startswith("```") and content.endswith("```"):
                             content = content.strip("`").strip()
-                            if content.startswith("plaintext") or content.startswith("markdown"):
-                                content = content.split("\n", 1)[-1]
-                        content = content.replace("<GİRDİ_METNİ>", "").replace("</GİRDİ_METNİ>", "").strip('"\'` \n')
+                        content = content.replace("<GİRDİ_METNİ>", "").replace("</GİRDİ_METNİ>", "").strip()
+                        content = re.sub(r'<[^>]+>', '', content).strip('"\'` \n')
                         return content
     except Exception as exc:
         print(f"[!] Gemini API Çağrı Hatası: {exc}", file=sys.stderr)
@@ -303,9 +302,8 @@ def call_nvidia_nim(
                 # Olası tırnak işaretlerini veya markdown kod bloklarını temizle
                 if content.startswith("```") and content.endswith("```"):
                     content = content.strip("`").strip()
-                    if content.startswith("plaintext") or content.startswith("markdown"):
-                        content = content.split("\n", 1)[-1]
-                content = content.replace("<GİRDİ_METNİ>", "").replace("</GİRDİ_METNİ>", "").strip('"\'` \n')
+                content = content.replace("<GİRDİ_METNİ>", "").replace("</GİRDİ_METNİ>", "").strip()
+                content = re.sub(r'<[^>]+>', '', content).strip('"\'` \n')
                 return content
     except Exception as exc:
         print(f"[!] NVIDIA API Çağrı Hatası: {exc}", file=sys.stderr)
@@ -690,13 +688,21 @@ def translate_with_ai(
 
     if actual_target == "en":
         sys_prompt = (
-            "Translate the given Turkish text into natural, fluent English.\n"
-            "Output ONLY the translated text without quotes, notes, or explanations."
+            "You are an ultra-natural conversational translator for Discord, WhatsApp, and social media.\n"
+            "TASK: Translate the given Turkish text into native, natural, colloquial English using modern chat phrasing and contractions.\n"
+            "GUIDELINES:\n"
+            "1. Use natural contractions and modern slang/chat phrasing (e.g., wanna, gonna, I'm, don't, gotta, no worries, sup, tbh, rn, bro, gotchu, idk, ty).\n"
+            "2. Match the exact tone: if casual/slang ('naber knk', 'hallederiz sıkıntı yok', 'geliyorum yoldayım', 'eyvallah sağ olasın', 'yarın buluşak mı'), translate into matching native chat English ('sup bro', 'no worries gotchu', 'on my way rn', 'thanks bro / appreciate it', 'wanna meet up tmrw?'). If formal, use polite natural English.\n"
+            "3. NEVER sound robotic, stiff, or like an academic textbook.\n"
+            "4. Output ONLY the translated text without quotes, notes, or tags."
         )
     else:
         sys_prompt = (
-            "Verilen yabancı metni (İngilizce, Almanca, Fransızca, İspanyolca vb.) doğal, akıcı ve profesyonel bir Türkçeye çevir.\n"
-            "YALNIZCA Türkçe çeviriyi yaz, açıklama, tırnak veya not ekleme."
+            "Sen Discord, WhatsApp ve sohbet ortamları için ultra doğal ve yerel bir çevirmensin.\n"
+            "GÖREV: Verilen yabancı metni yaşayan, samimi, akıcı ve günlük Türkçe konuşma/chat diline çevir.\n"
+            "KURALLAR:\n"
+            "1. Kitabi ve robotik dilden kaçın; günlük konuşma dilini ve yaygın chat kalıplarını kullan (örn: 'sup bro' -> 'naber kanka', 'no worries' -> 'sıkıntı yok / dert etme', 'gotchu' -> 'hallettim / anladım', 'tbh' -> 'valla / doğrusu', 'cya tmrw' -> 'yarın görüşürüz').\n"
+            "2. YALNIZCA Türkçe çeviriyi yaz, tırnak, selamlama veya açıklama ekleme."
         )
 
     try:
