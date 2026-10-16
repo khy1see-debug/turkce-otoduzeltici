@@ -603,7 +603,17 @@ class CorrectionApiHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
-        elif parsed.path == "/api/health":
+        elif parsed.path in ("/show", "/api/show"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "message": "Pencere öne getiriliyor"}).encode("utf-8"))
+            if hasattr(CorrectionApiHandler, "show_window_callback") and callable(CorrectionApiHandler.show_window_callback):
+                try:
+                    CorrectionApiHandler.show_window_callback()
+                except Exception as e:
+                    print(f"show_window_callback hatası: {e}")
+        elif parsed.path in ("/api/health", "/health"):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()

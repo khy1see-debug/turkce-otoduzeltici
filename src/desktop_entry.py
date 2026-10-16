@@ -51,24 +51,18 @@ sys.excepthook = excepthook
 import threading
 threading.excepthook = lambda args: excepthook(args.exc_type, args.exc_value, args.exc_traceback)
 
-_single_instance_mutex = None
-
-def ensure_single_instance():
-    """Win32 Named Mutex ile uygulamanın tek bir örneğinin çalışmasını sağlar."""
-    global _single_instance_mutex
-    if sys.platform != "win32":
-        return True
+def check_already_running_and_show():
+    """Eğer uygulama arka planda zaten açıksa, REST API ile penceresini öne getirir ve True döner."""
+    import urllib.request
     try:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        mutex_name = "Global\\TurkceOtomatikDuzeltici_App_Mutex_v1"
-        _single_instance_mutex = kernel32.CreateMutexW(None, False, mutex_name)
-        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-            print("[!] Halihazırda çalışan bir Türkçe Otomatik Düzeltici kopyası mevcut. Çıkılıyor.")
-            sys.exit(0)
-        return True
+        req = urllib.request.Request("http://127.0.0.1:8765/show", headers={"User-Agent": "Launcher"})
+        with urllib.request.urlopen(req, timeout=0.8) as resp:
+            if resp.status == 200:
+                print("[+] Mevcut uygulama penceresi öne getirildi.")
+                return True
     except Exception:
-        return True
+        pass
+    return False
 
 def run():
     # Argüman kontrolü (CLI / Web / Parametreler)
@@ -76,8 +70,9 @@ def run():
         from src.cli import main as cli_main
         cli_main()
     else:
-        # Masaüstü GUI & Sistem Tepsisi Modu: Eski kopyaları temizle ve başlat
-        ensure_single_instance()
+        # Masaüstü GUI & Sistem Tepsisi Modu: Zaten açıksa öne getir, yoksa başlat
+        if check_already_running_and_show():
+            sys.exit(0)
         from src.app_tray import main as tray_main
         tray_main()
 

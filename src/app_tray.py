@@ -721,9 +721,18 @@ class SystemTrayApp(QSystemTrayIcon):
         from src.main_window import MainWindow
         if self.main_window is None:
             self.main_window = MainWindow(tray_icon=self)
+        self.main_window.showNormal()
         self.main_window.show()
-        self.main_window.activateWindow()
         self.main_window.raise_()
+        self.main_window.activateWindow()
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                hwnd = int(self.main_window.winId())
+                ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
 
     def show_personal_dictionary(self):
         """Kişisel sözlük dosyasını varsayılan editörde aç."""
@@ -866,6 +875,14 @@ def main():
     tray_icon = SystemTrayApp()
     tray_icon.show()
     tray_icon.show_settings_window()
+
+    # REST API üzerinden /show çağrıldığında Qt ana thread'inde pencereyi öne getir
+    try:
+        from src.web import CorrectionApiHandler
+        from PyQt6.QtCore import QTimer
+        CorrectionApiHandler.show_window_callback = lambda: QTimer.singleShot(0, tray_icon.show_settings_window)
+    except Exception:
+        pass
 
     _notification_manager.show_notification(
         "🇹🇷 Türkçe Otomatik Düzeltici",
