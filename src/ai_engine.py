@@ -774,7 +774,21 @@ def free_wiki_summary(query: str, timeout: float = 3.5) -> Optional[str]:
         clean = query.strip("?.,;:! ")
     try:
         import urllib.parse
-        url = "https://tr.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(clean)
+        target_title = clean
+
+        # 1. Başlığı opensearch ile çözümle (çoğul ekleri, yazım varyasyonlarını düzeltir)
+        search_url = f"https://tr.wikipedia.org/w/api.php?action=opensearch&search={urllib.parse.quote(clean)}&limit=1&namespace=0&format=json"
+        req_search = urllib.request.Request(search_url, headers={"User-Agent": "Turkce-Otoduzeltici/1.0"})
+        try:
+            with urllib.request.urlopen(req_search, timeout=2.0) as resp_s:
+                if resp_s.status == 200:
+                    s_data = json.loads(resp_s.read().decode("utf-8"))
+                    if len(s_data) > 1 and s_data[1]:
+                        target_title = s_data[1][0]
+        except Exception:
+            pass
+
+        url = "https://tr.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(target_title)
         req = urllib.request.Request(url, headers={"User-Agent": "Turkce-Otoduzeltici/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if resp.status == 200:
