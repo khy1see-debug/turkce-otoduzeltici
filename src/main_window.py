@@ -38,7 +38,10 @@ from src.ai_engine import (
     AVAILABLE_MODELS,
     test_gemini_connection,
     AVAILABLE_GEMINI_MODELS,
-    DEFAULT_GEMINI_MODEL
+    DEFAULT_GEMINI_MODEL,
+    test_groq_connection,
+    AVAILABLE_GROQ_MODELS,
+    DEFAULT_GROQ_MODEL,
 )
 
 SAMPLE_TEXTS = [
@@ -755,10 +758,39 @@ class MainWindow(QMainWindow):
         ai_layout.addRow(ai_info)
 
         self.ai_provider_combo = QComboBox()
-        self.ai_provider_combo.addItem("🤖 Otomatik Algıla (Gemini varsa Gemini, yoksa NVIDIA)", "auto")
-        self.ai_provider_combo.addItem("✨ Google Gemini API (Ultra Hızlı, Geniş Kota, Gemini 2.0)", "gemini")
+        self.ai_provider_combo.addItem("🤖 Otomatik Algıla (En Hızlı Dönen Kazanır)", "auto")
+        self.ai_provider_combo.addItem("⚡ Groq Cloud (Llama 3.3 70B - Ultra Düşük Gecikme)", "groq")
+        self.ai_provider_combo.addItem("✨ Google Gemini API (Ultra Hızlı, Geniş Kota, Gemini 3.5)", "gemini")
         self.ai_provider_combo.addItem("🟢 NVIDIA NIM API (Llama 3.2 11B / OSS)", "nvidia")
         ai_layout.addRow("Öncelikli Yapay Zeka:", self.ai_provider_combo)
+
+        # Groq Cloud Ayarları
+        groq_box = QHBoxLayout()
+        self.groq_key_edit = QLineEdit()
+        self.groq_key_edit.setPlaceholderText("gsk_...")
+        self.groq_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.groq_key_toggle_btn = QPushButton("👁️ Göster")
+        self.groq_key_toggle_btn.setObjectName("secondaryBtn")
+        self.groq_key_toggle_btn.clicked.connect(self.toggle_groq_key_visibility)
+        groq_box.addWidget(self.groq_key_edit)
+        groq_box.addWidget(self.groq_key_toggle_btn)
+        ai_layout.addRow("Groq Cloud API Key:", groq_box)
+
+        self.groq_model_combo = QComboBox()
+        for model_id, model_label in AVAILABLE_GROQ_MODELS:
+            self.groq_model_combo.addItem(model_label, model_id)
+        ai_layout.addRow("Groq Modeli:", self.groq_model_combo)
+
+        test_groq_box = QHBoxLayout()
+        self.test_groq_btn = QPushButton("🔌 Groq Bağlantısını Test Et")
+        self.test_groq_btn.setObjectName("secondaryBtn")
+        self.test_groq_btn.clicked.connect(self.test_groq_action)
+        self.groq_test_result_label = QLabel("")
+        self.groq_test_result_label.setStyleSheet("font-size: 11px;")
+        test_groq_box.addWidget(self.test_groq_btn)
+        test_groq_box.addWidget(self.groq_test_result_label)
+        test_groq_box.addStretch()
+        ai_layout.addRow(test_groq_box)
 
         # Google Gemini Ayarları
         gemini_box = QHBoxLayout()
@@ -830,6 +862,34 @@ class MainWindow(QMainWindow):
 
         layout.addStretch()
 
+    def toggle_groq_key_visibility(self):
+        if self.groq_key_edit.echoMode() == QLineEdit.EchoMode.Password:
+            self.groq_key_edit.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.groq_key_toggle_btn.setText("🔒 Gizle")
+        else:
+            self.groq_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.groq_key_toggle_btn.setText("👁️ Göster")
+
+    def test_groq_action(self):
+        key = self.groq_key_edit.text().strip()
+        if not key:
+            self.groq_test_result_label.setText("❌ Lütfen önce bir Groq API anahtarı girin.")
+            self.groq_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+            return
+
+        model_id = self.groq_model_combo.currentData() or DEFAULT_GROQ_MODEL
+        self.groq_test_result_label.setText("⏳ Groq bağlantısı test ediliyor...")
+        self.groq_test_result_label.setStyleSheet("color: #38bdf8; font-size: 11px;")
+        QApplication.processEvents()
+
+        ok, msg, latency = test_groq_connection(key, model_id)
+        if ok:
+            self.groq_test_result_label.setText(f"✅ {msg} ({latency} ms)")
+            self.groq_test_result_label.setStyleSheet("color: #10b981; font-size: 11px; font-weight: bold;")
+        else:
+            self.groq_test_result_label.setText(f"❌ {msg}")
+            self.groq_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+
     def toggle_gemini_key_visibility(self):
         if self.gemini_key_edit.echoMode() == QLineEdit.EchoMode.Password:
             self.gemini_key_edit.setEchoMode(QLineEdit.EchoMode.Normal)
@@ -897,14 +957,22 @@ class MainWindow(QMainWindow):
         current_theme = self.settings.get("theme", "dark")
         self.theme_combo.setCurrentIndex(0 if current_theme == "dark" else 1)
 
-        # AI Sağlayıcı & Gemini Ayarları
+        # AI Sağlayıcı, Groq & Gemini Ayarları
         provider = self.settings.get("ai_provider", "auto")
         p_idx = self.ai_provider_combo.findData(provider)
         if p_idx >= 0:
             self.ai_provider_combo.setCurrentIndex(p_idx)
 
+        # Groq
+        self.groq_key_edit.setText(self.settings.get("groq_api_key", ""))
+        saved_groq_model = self.settings.get("groq_model", DEFAULT_GROQ_MODEL)
+        gr_idx = self.groq_model_combo.findData(saved_groq_model)
+        if gr_idx >= 0:
+            self.groq_model_combo.setCurrentIndex(gr_idx)
+
+        # Gemini
         self.gemini_key_edit.setText(self.settings.get("gemini_api_key", ""))
-        saved_gemini_model = self.settings.get("gemini_model", "gemini-2.0-flash")
+        saved_gemini_model = self.settings.get("gemini_model", "gemini-3.5-flash-lite")
         g_idx = self.gemini_model_combo.findData(saved_gemini_model)
         if g_idx >= 0:
             self.gemini_model_combo.setCurrentIndex(g_idx)
@@ -936,8 +1004,10 @@ class MainWindow(QMainWindow):
             "contextual_correction": True,
             "theme": theme,
             "ai_provider": self.ai_provider_combo.currentData() or "auto",
+            "groq_api_key": self.groq_key_edit.text().strip(),
+            "groq_model": self.groq_model_combo.currentData() or DEFAULT_GROQ_MODEL,
             "gemini_api_key": self.gemini_key_edit.text().strip(),
-            "gemini_model": self.gemini_model_combo.currentData() or "gemini-2.0-flash",
+            "gemini_model": self.gemini_model_combo.currentData() or "gemini-3.5-flash-lite",
             "nvidia_api_key": self.ai_key_edit.text().strip(),
             "ai_model": self.ai_model_combo.currentData() or "meta/llama-3.2-11b-vision-instruct",
             "use_ai_in_tray": self.ai_tray_check.isChecked()

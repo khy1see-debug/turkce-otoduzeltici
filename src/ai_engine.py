@@ -19,6 +19,15 @@ from src import settings_manager
 DEFAULT_NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 DEFAULT_MODEL = "meta/llama-3.2-11b-vision-instruct"
 
+DEFAULT_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+
+AVAILABLE_GROQ_MODELS = [
+    ("llama-3.3-70b-versatile", "Llama 3.3 70B Versatile (Önerilen - Ultra Hızlı)"),
+    ("llama-3.1-8b-instant", "Llama 3.1 8B Instant (Işık Hızında ~250ms)"),
+    ("mixtral-8x7b-32768", "Mixtral 8x7B (Geniş Bağlam)"),
+]
+
 AVAILABLE_MODELS = [
     ("meta/llama-3.2-11b-vision-instruct", "Meta Llama 3.2 11B (Önerilen - Ultra Hızlı ~800ms)"),
     ("stepfun-ai/step-5-preview", "Step-5 Preview (Derin Düşünen Model ~5sn)"),
@@ -83,6 +92,26 @@ def get_nvidia_api_key(explicit_key: Optional[str] = None) -> Optional[str]:
     try:
         settings = settings_manager.load_settings()
         cfg_key = settings.get("nvidia_api_key", "").strip()
+        if cfg_key:
+            return cfg_key
+    except Exception:
+        pass
+
+    return None
+
+
+def get_groq_api_key(explicit_key: Optional[str] = None) -> Optional[str]:
+    """Groq API anahtarını (gsk_...) öncelik sırasına göre bulur."""
+    if explicit_key and explicit_key.strip():
+        return explicit_key.strip()
+
+    env_key = os.environ.get("GROQ_API_KEY")
+    if env_key and env_key.strip():
+        return env_key.strip()
+
+    try:
+        settings = settings_manager.load_settings()
+        cfg_key = settings.get("groq_api_key", "").strip()
         if cfg_key:
             return cfg_key
     except Exception:
@@ -312,6 +341,129 @@ def call_nvidia_nim(
     return None
 
 
+def call_groq_api(
+    text: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    timeout: float = 6.0,
+    sys_prompt: str = SYSTEM_PROMPT,
+) -> Optional[str]:
+    """
+    Groq Cloud API kullanarak Llama 3.3 70B / 8B ile ultra hızlı metin işleme (~200ms).
+    """
+    key = get_groq_api_key(api_key)
+    if not key:
+        return None
+
+    if not model:
+        try:
+            settings = settings_manager.load_settings()
+            model = settings.get("groq_model", DEFAULT_GROQ_MODEL)
+        except Exception:
+            model = DEFAULT_GROQ_MODEL
+
+    user_prompt = f"<GİRDİ_METNİ>\n{text}\n</GİRDİ_METNİ>"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 1024,
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        DEFAULT_GROQ_URL,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Turkce-Otoduzeltici/1.0",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if response.status == 200:
+                body = response.read().decode("utf-8")
+                res_json = json.loads(body)
+                choices = res_json.get("choices", [])
+                if not choices:
+                    return None
+                raw_content = choices[0].get("message", {}).get("content")
+                if not raw_content:
+                    return None
+                content = raw_content.strip()
+                if content.startswith("```") and content.endswith("```"):
+                    content = content.strip("`").strip()
+                content = content.replace("<GİRDİ_METNİ>", "").replace("</GİRDİ_METNİ>", "").strip()
+                content = re.sub(r'<[^>]+>', '', content).strip('"\'` \n')
+                return content
+    except Exception as exc:
+        print(f"[!] Groq API Çağrı Hatası: {exc}", file=sys.stderr)
+        return None
+
+    return None
+
+
+def test_groq_connection(
+    api_key: str,
+    model: Optional[str] = None,
+    timeout: float = 6.0,
+) -> Tuple[bool, str, float]:
+    """
+    Girilen Groq API anahtarını ve bağlantısını test eder.
+    (başarılı_mı, mesaj, yanıt_süresi_ms) döner.
+    """
+    key = api_key.strip() if api_key else ""
+    if not key:
+        return False, "API anahtarı boş bırakılamaz.", 0.0
+
+    target_model = model or DEFAULT_GROQ_MODEL
+    payload = {
+        "model": target_model,
+        "messages": [{"role": "user", "content": "test"}],
+        "max_tokens": 5,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        DEFAULT_GROQ_URL,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Turkce-Otoduzeltici/1.0",
+        },
+        method="POST",
+    )
+
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if response.status == 200:
+                latency_ms = round((time.time() - t0) * 1000, 1)
+                return True, f"Bağlantı başarılı! ({target_model})", latency_ms
+    except urllib.error.HTTPError as exc:
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        err_body = exc.read().decode("utf-8", errors="replace")
+        try:
+            err_json = json.loads(err_body)
+            msg = err_json.get("error", {}).get("message") or str(exc)
+        except Exception:
+            msg = f"HTTP {exc.code} {exc.reason}"
+        return False, f"Groq API Hatası ({msg})", latency_ms
+    except Exception as exc:
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        return False, f"Bağlantı hatası: {exc}", latency_ms
+
+    return False, "Bilinmeyen yanıt alındı.", 0.0
+
+
 def test_nvidia_connection(
     api_key: str,
     model: Optional[str] = None,
@@ -476,23 +628,40 @@ def fix_with_ai(
         target_provider = provider or "auto"
 
     res = None
-    # 1. Gemini Tercihi
-    if target_provider == "gemini":
+    # 1. Groq Tercihi
+    if target_provider == "groq":
+        res = call_groq_api(raw_text, sys_prompt=SYSTEM_PROMPT, api_key=api_key, model=model, timeout=3.0)
+    # 2. Gemini Tercihi
+    elif target_provider == "gemini":
         res = call_gemini_api(raw_text, sys_prompt=SYSTEM_PROMPT, api_key=api_key, model=model, timeout=3.0)
-    # 2. NVIDIA Tercihi
+    # 3. NVIDIA Tercihi
     elif target_provider == "nvidia":
         res = call_nvidia_nim(raw_text, api_key=api_key, model=model, sys_prompt=SYSTEM_PROMPT, timeout=3.0)
-    # 3. Otomatik Mod (Gemini ve NVIDIA birlikte varsa paralel yarış - en hızlı dönen kazanır)
+    # 4. Otomatik Mod (Groq, Gemini ve NVIDIA birlikte varsa paralel yarış - en hızlı dönen kazanır)
     else:
+        gr_key = get_groq_api_key(api_key)
         g_key = get_gemini_api_key(api_key)
         nv_key = get_nvidia_api_key(api_key)
-        if g_key and nv_key:
+        active_keys = []
+        if gr_key:
+            active_keys.append(("groq", gr_key))
+        if g_key:
+            active_keys.append(("gemini", g_key))
+        if nv_key:
+            active_keys.append(("nvidia", nv_key))
+
+        if len(active_keys) > 1:
             from concurrent.futures import ThreadPoolExecutor, as_completed
-            ex = ThreadPoolExecutor(max_workers=2)
-            futures = {
-                ex.submit(call_gemini_api, raw_text, sys_prompt=SYSTEM_PROMPT, api_key=g_key, model=model, timeout=3.0): "gemini",
-                ex.submit(call_nvidia_nim, raw_text, api_key=nv_key, model=model, sys_prompt=SYSTEM_PROMPT, timeout=3.0): "nvidia",
-            }
+            ex = ThreadPoolExecutor(max_workers=len(active_keys))
+            futures = {}
+            for prov, k in active_keys:
+                if prov == "groq":
+                    futures[ex.submit(call_groq_api, raw_text, sys_prompt=SYSTEM_PROMPT, api_key=k, model=model, timeout=3.0)] = "groq"
+                elif prov == "gemini":
+                    futures[ex.submit(call_gemini_api, raw_text, sys_prompt=SYSTEM_PROMPT, api_key=k, model=model, timeout=3.0)] = "gemini"
+                elif prov == "nvidia":
+                    futures[ex.submit(call_nvidia_nim, raw_text, api_key=k, model=model, sys_prompt=SYSTEM_PROMPT, timeout=3.0)] = "nvidia"
+
             winner = None
             for fut in as_completed(futures):
                 try:
@@ -508,6 +677,8 @@ def fix_with_ai(
                 pass
             if winner:
                 return winner
+        elif gr_key:
+            res = call_groq_api(raw_text, sys_prompt=SYSTEM_PROMPT, api_key=gr_key, model=model, timeout=3.0)
         elif g_key:
             res = call_gemini_api(raw_text, sys_prompt=SYSTEM_PROMPT, api_key=g_key, model=model, timeout=3.0)
         elif nv_key:
@@ -713,21 +884,37 @@ def translate_with_ai(
         target_provider = provider or "auto"
 
     res = None
-    if target_provider == "gemini":
+    if target_provider == "groq":
+        res = call_groq_api(text, sys_prompt=sys_prompt, api_key=api_key, model=model, timeout=timeout)
+    elif target_provider == "gemini":
         res = call_gemini_api(text, sys_prompt=sys_prompt, api_key=api_key, model=model, timeout=timeout)
     elif target_provider == "nvidia":
         res = call_nvidia_nim(text, api_key=api_key, model=model, timeout=timeout, sys_prompt=sys_prompt)
     else:
-        # "auto" mod: Gemini ve NVIDIA birlikte varsa paralel yarış
+        # "auto" mod: Groq, Gemini ve NVIDIA birlikte varsa paralel yarış
+        gr_key = get_groq_api_key(api_key)
         g_key = get_gemini_api_key(api_key)
         nv_key = get_nvidia_api_key(api_key)
-        if g_key and nv_key:
+        active_keys = []
+        if gr_key:
+            active_keys.append(("groq", gr_key))
+        if g_key:
+            active_keys.append(("gemini", g_key))
+        if nv_key:
+            active_keys.append(("nvidia", nv_key))
+
+        if len(active_keys) > 1:
             from concurrent.futures import ThreadPoolExecutor, as_completed
-            ex = ThreadPoolExecutor(max_workers=2)
-            futures = {
-                ex.submit(call_gemini_api, text, sys_prompt=sys_prompt, api_key=g_key, model=model, timeout=timeout): "gemini",
-                ex.submit(call_nvidia_nim, text, api_key=nv_key, model=model, timeout=timeout, sys_prompt=sys_prompt): "nvidia",
-            }
+            ex = ThreadPoolExecutor(max_workers=len(active_keys))
+            futures = {}
+            for prov, k in active_keys:
+                if prov == "groq":
+                    futures[ex.submit(call_groq_api, text, sys_prompt=sys_prompt, api_key=k, model=model, timeout=timeout)] = "groq"
+                elif prov == "gemini":
+                    futures[ex.submit(call_gemini_api, text, sys_prompt=sys_prompt, api_key=k, model=model, timeout=timeout)] = "gemini"
+                elif prov == "nvidia":
+                    futures[ex.submit(call_nvidia_nim, text, api_key=k, model=model, timeout=timeout, sys_prompt=sys_prompt)] = "nvidia"
+
             winner = None
             for fut in as_completed(futures):
                 try:
@@ -743,6 +930,8 @@ def translate_with_ai(
                 pass
             if winner:
                 return winner
+        elif gr_key:
+            res = call_groq_api(text, sys_prompt=sys_prompt, api_key=gr_key, model=model, timeout=timeout)
         elif g_key:
             res = call_gemini_api(text, sys_prompt=sys_prompt, api_key=g_key, model=model, timeout=timeout)
         elif nv_key:
@@ -843,20 +1032,36 @@ def generate_knowledge(
         target_provider = provider or "auto"
 
     res = None
-    if target_provider == "gemini":
+    if target_provider == "groq":
+        res = call_groq_api(clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=api_key, model=model, timeout=timeout)
+    elif target_provider == "gemini":
         res = call_gemini_api(clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=api_key, model=model, timeout=timeout)
     elif target_provider == "nvidia":
         res = call_nvidia_nim(clean_query, api_key=api_key, model=model, timeout=timeout, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT)
     else:
+        gr_key = get_groq_api_key(api_key)
         g_key = get_gemini_api_key(api_key)
         nv_key = get_nvidia_api_key(api_key)
-        if g_key and nv_key:
+        active_keys = []
+        if gr_key:
+            active_keys.append(("groq", gr_key))
+        if g_key:
+            active_keys.append(("gemini", g_key))
+        if nv_key:
+            active_keys.append(("nvidia", nv_key))
+
+        if len(active_keys) > 1:
             from concurrent.futures import ThreadPoolExecutor, as_completed
-            ex = ThreadPoolExecutor(max_workers=2)
-            futures = {
-                ex.submit(call_gemini_api, clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=g_key, model=model, timeout=timeout): "gemini",
-                ex.submit(call_nvidia_nim, clean_query, api_key=nv_key, model=model, timeout=timeout, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT): "nvidia",
-            }
+            ex = ThreadPoolExecutor(max_workers=len(active_keys))
+            futures = {}
+            for prov, k in active_keys:
+                if prov == "groq":
+                    futures[ex.submit(call_groq_api, clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=k, model=model, timeout=timeout)] = "groq"
+                elif prov == "gemini":
+                    futures[ex.submit(call_gemini_api, clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=k, model=model, timeout=timeout)] = "gemini"
+                elif prov == "nvidia":
+                    futures[ex.submit(call_nvidia_nim, clean_query, api_key=k, model=model, timeout=timeout, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT)] = "nvidia"
+
             winner = None
             for fut in as_completed(futures):
                 try:
@@ -872,6 +1077,8 @@ def generate_knowledge(
                 pass
             if winner:
                 return winner
+        elif gr_key:
+            res = call_groq_api(clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=gr_key, model=model, timeout=timeout)
         elif g_key:
             res = call_gemini_api(clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=g_key, model=model, timeout=timeout)
         elif nv_key:

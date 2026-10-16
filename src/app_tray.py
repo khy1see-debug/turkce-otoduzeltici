@@ -573,7 +573,7 @@ class SystemTrayApp(QSystemTrayIcon):
 
         # AI Modu Aç/Kapat (Hızlı Geçiş)
         is_ai_on = self.settings.get("use_ai_in_tray", False)
-        self.toggle_ai_action = QAction("🤖 Yapay Zeka Modu (Gemini / NVIDIA)", self)
+        self.toggle_ai_action = QAction("🤖 Yapay Zeka Modu (Groq / Gemini / NVIDIA)", self)
         self.toggle_ai_action.setCheckable(True)
         self.toggle_ai_action.setChecked(is_ai_on)
         self.toggle_ai_action.triggered.connect(self.toggle_ai_mode)
