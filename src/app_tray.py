@@ -446,6 +446,15 @@ class SystemTrayApp(QSystemTrayIcon):
         self._win32_hotkey_thread = None
         self.main_window = None
 
+        # Yüzen Düzeltme Balonu (Grammarly Modu)
+        from src.floating_pill import FloatingCorrectionPill
+        self.floating_pill = FloatingCorrectionPill(
+            on_correct=correct_selected_text,
+            on_translate=translate_selected_text,
+            is_active_fn=lambda: correction_active,
+            enabled=self.settings.get("floating_pill_enabled", True),
+        )
+
         self.menu = QMenu()
         self.setup_menu()
         self.setContextMenu(self.menu)
@@ -465,8 +474,16 @@ class SystemTrayApp(QSystemTrayIcon):
         self.personal_dict_action.triggered.connect(self.show_personal_dictionary)
         self.menu.addAction(self.personal_dict_action)
 
+        # Yüzen Düzeltme Balonu Aç/Kapat
+        is_pill_on = self.settings.get("floating_pill_enabled", True)
+        self.toggle_pill_action = QAction("🪄 Yüzen Düzeltme Balonu (Seçimde Göster)", self)
+        self.toggle_pill_action.setCheckable(True)
+        self.toggle_pill_action.setChecked(is_pill_on)
+        self.toggle_pill_action.triggered.connect(self.toggle_floating_pill)
+        self.menu.addAction(self.toggle_pill_action)
+
         # AI Modu Aç/Kapat (Hızlı Geçiş)
-        is_ai_on = self.settings.get("use_ai_in_tray", True)
+        is_ai_on = self.settings.get("use_ai_in_tray", False)
         self.toggle_ai_action = QAction("🤖 Yapay Zeka Modu (Gemini / NVIDIA)", self)
         self.toggle_ai_action.setCheckable(True)
         self.toggle_ai_action.setChecked(is_ai_on)
@@ -527,6 +544,26 @@ class SystemTrayApp(QSystemTrayIcon):
             "Otomatik düzeltme aktif." if correction_active else "Otomatik düzeltme duraklatıldı."
         )
 
+    def toggle_floating_pill(self, checked):
+        """Yüzen Düzeltme Balonunu (Floating Pill) aç/kapat."""
+        self.settings = settings_manager.load_settings()
+        self.settings["floating_pill_enabled"] = checked
+        settings_manager.save_settings(self.settings)
+
+        if getattr(self, "floating_pill", None):
+            self.floating_pill.set_enabled(checked)
+
+        if self.main_window and hasattr(self.main_window, "floating_pill_check"):
+            self.main_window.floating_pill_check.setChecked(checked)
+
+        if hasattr(self, "toggle_pill_action") and self.toggle_pill_action.isChecked() != checked:
+            self.toggle_pill_action.setChecked(checked)
+
+        _notification_manager.show_notification(
+            "🪄 Yüzen Düzeltme Balonu",
+            "Seçim baloncuğu aktif edildi." if checked else "Seçim baloncuğu devre dışı bırakıldı."
+        )
+
     def toggle_ai_mode(self, checked):
         """Kısayollar için AI modunu doğrudan tepsi menüsünden aç/kapat."""
         self.settings = settings_manager.load_settings()
@@ -554,6 +591,12 @@ class SystemTrayApp(QSystemTrayIcon):
 
     def exit_application(self):
         """Uygulamayı tamamen kapat."""
+        if getattr(self, "floating_pill", None):
+            try:
+                self.floating_pill.hide_pill()
+                self.floating_pill.close()
+            except Exception:
+                pass
         if getattr(self, "_win32_hotkey_thread", None):
             try:
                 self._win32_hotkey_thread.stop()

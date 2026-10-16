@@ -728,6 +728,7 @@ class MainWindow(QMainWindow):
 
         self.startup_check = QCheckBox("Windows Başlangıcında Otomatik Başlat")
         self.sound_check = QCheckBox("Düzeltme Yapıldığında Ses Efekti Çal")
+        self.floating_pill_check = QCheckBox("🪄 Metin Seçildiğinde Yüzen Düzeltme Balonunu Göster (Grammarly Modu)")
         self.slang_check = QCheckBox("Chat Kısaltmalarını Aç (slm -> selam, tşk -> teşekkürler)")
         self.elongation_check = QCheckBox("Aşırı Harf Uzatmalarını Temizle (geliyoruuuum -> geliyorum)")
 
@@ -736,6 +737,7 @@ class MainWindow(QMainWindow):
 
         opt_layout.addRow(self.startup_check)
         opt_layout.addRow(self.sound_check)
+        opt_layout.addRow(self.floating_pill_check)
         opt_layout.addRow(self.slang_check)
         opt_layout.addRow(self.elongation_check)
         opt_layout.addRow("Görsel Tema:", self.theme_combo)
@@ -889,6 +891,7 @@ class MainWindow(QMainWindow):
         reg_autostart = is_autostart_enabled() if sys.platform == "win32" else self.settings.get("startup_toggle", False)
         self.startup_check.setChecked(reg_autostart)
         self.sound_check.setChecked(self.settings.get("sound_toggle", True))
+        self.floating_pill_check.setChecked(self.settings.get("floating_pill_enabled", True))
         self.slang_check.setChecked(self.settings.get("slang_expansion", True))
         self.elongation_check.setChecked(self.settings.get("elongation_cleanup", True))
         current_theme = self.settings.get("theme", "dark")
@@ -912,7 +915,7 @@ class MainWindow(QMainWindow):
         idx = self.ai_model_combo.findData(saved_model)
         if idx >= 0:
             self.ai_model_combo.setCurrentIndex(idx)
-        self.ai_tray_check.setChecked(self.settings.get("use_ai_in_tray", True))
+        self.ai_tray_check.setChecked(self.settings.get("use_ai_in_tray", False))
 
     def save_settings_action(self):
         hotkey_str = self.hotkey_edit.keySequence().toString(QKeySequence.SequenceFormat.NativeText).lower()
@@ -921,11 +924,13 @@ class MainWindow(QMainWindow):
 
         theme = "dark" if self.theme_combo.currentIndex() == 0 else "light"
         startup_enabled = self.startup_check.isChecked()
+        pill_enabled = self.floating_pill_check.isChecked()
 
         new_settings = {
             "hotkey": hotkey_str,
             "startup_toggle": startup_enabled,
             "sound_toggle": self.sound_check.isChecked(),
+            "floating_pill_enabled": pill_enabled,
             "slang_expansion": self.slang_check.isChecked(),
             "elongation_cleanup": self.elongation_check.isChecked(),
             "contextual_correction": True,
@@ -946,11 +951,15 @@ class MainWindow(QMainWindow):
         if sys.platform == "win32":
             set_autostart(startup_enabled)
 
-        # Tepsi ikonundaki kısayolu ve AI modunu güncelle
+        # Tepsi ikonundaki kısayolu, yüzen balonu ve AI modunu güncelle
         if self.tray_icon and hasattr(self.tray_icon, "update_hotkey"):
             self.tray_icon.update_hotkey(hotkey_str)
         if self.tray_icon and hasattr(self.tray_icon, "toggle_ai_action"):
             self.tray_icon.toggle_ai_action.setChecked(self.ai_tray_check.isChecked())
+        if self.tray_icon and hasattr(self.tray_icon, "floating_pill"):
+            self.tray_icon.floating_pill.set_enabled(pill_enabled)
+        if self.tray_icon and hasattr(self.tray_icon, "toggle_pill_action"):
+            self.tray_icon.toggle_pill_action.setChecked(pill_enabled)
 
         QMessageBox.information(self, "Başarılı", "Ayarlar başarıyla kaydedildi.")
 

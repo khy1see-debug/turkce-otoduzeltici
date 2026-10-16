@@ -21,6 +21,7 @@ DEFAULTS = {
     "nvidia_api_key": "",
     "ai_model": "meta/llama-3.2-11b-vision-instruct",
     "use_ai_in_tray": False,
+    "floating_pill_enabled": True,
 }
 
 def get_config_dir():
