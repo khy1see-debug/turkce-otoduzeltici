@@ -92,6 +92,24 @@ QPushButton#infoBtn:hover {
 QPushButton#infoBtn:pressed {
     background: #92400e;
 }
+QPushButton#toneBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7c3aed, stop:1 #6d28d9);
+    color: #ffffff;
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    border-radius: 10px;
+    padding: 5px 11px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: bold;
+}
+QPushButton#toneBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #7c3aed);
+    color: #ffffff;
+    border: 1px solid #c4b5fd;
+}
+QPushButton#toneBtn:pressed {
+    background: #5b21b6;
+}
 QPushButton#closeBtn {
     background-color: transparent;
     color: #94a3b8;
@@ -119,6 +137,7 @@ class FloatingCorrectionPill(QWidget):
         on_correct: Callable[[], None],
         on_translate: Callable[[], None],
         on_info: Optional[Callable[[], None]] = None,
+        on_tone: Optional[Callable[[], None]] = None,
         is_active_fn: Optional[Callable[[], bool]] = None,
         enabled: bool = True,
         parent: Optional[QWidget] = None,
@@ -127,6 +146,7 @@ class FloatingCorrectionPill(QWidget):
         self._on_correct = on_correct
         self._on_translate = on_translate
         self._on_info = on_info
+        self._on_tone = on_tone
         self._is_active_fn = is_active_fn or (lambda: True)
         self.enabled = enabled
 
@@ -247,6 +267,14 @@ class FloatingCorrectionPill(QWidget):
         self.info_btn.clicked.connect(self._trigger_info)
         pill_layout.addWidget(self.info_btn)
 
+        self.tone_btn = QPushButton("👔 Tonla")
+        self.tone_btn.setObjectName("toneBtn")
+        self.tone_btn.setCursor( QCursor(Qt.CursorShape.PointingHandCursor) )
+        self.tone_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.tone_btn.setToolTip("Seçili metni resmi/kurumsal iş diline çevir")
+        self.tone_btn.clicked.connect(self._trigger_tone)
+        pill_layout.addWidget(self.tone_btn)
+
         self.close_btn = QPushButton("✕")
         self.close_btn.setObjectName("closeBtn")
         self.close_btn.setCursor( QCursor(Qt.CursorShape.PointingHandCursor) )
@@ -333,6 +361,14 @@ class FloatingCorrectionPill(QWidget):
         self.hide_pill()
         self._restore_target_focus()
         threading.Thread(target=self._on_info, daemon=True).start()
+
+    def _trigger_tone(self):
+        if not self._on_tone:
+            return
+        import threading
+        self.hide_pill()
+        self._restore_target_focus()
+        threading.Thread(target=self._on_tone, daemon=True).start()
 
     @staticmethod
     def _get_window_rect(hwnd: int) -> Optional[Tuple[int, int, int, int]]:

@@ -519,6 +519,70 @@ def generate_knowledge_for_selected_text(pre_captured=None):
                 pass
 
 
+def change_text_tone(tone: str = "formal"):
+    """Seçili metnin üslubunu (resmi, samimi, özet) yapay zeka ile dönüştürür."""
+    global correction_active
+    if not correction_active:
+        return
+
+    original_clipboard, selected_text = _capture_active_text()
+    if not selected_text or not selected_text.strip():
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+        _notification_manager.show_notification(
+            "⚠️ Metin Bulunamadı",
+            "Lütfen tonunu değiştirmek istediğiniz metni seçin."
+        )
+        return
+
+    try:
+        from src.ai_engine import rewrite_tone
+        transformed = rewrite_tone(selected_text, tone=tone)
+        if not transformed or not transformed.strip():
+            _notification_manager.show_notification(
+                "⚠️ Dönüştürülemedi",
+                "Metin tonu dönüştürülürken yapay zeka yanıt veremedi."
+            )
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            return
+
+        res = transformed.strip()
+        pyperclip.copy(res)
+        time.sleep(0.04)
+        _send_win32_key_combination('v')
+
+        settings = settings_manager.load_settings()
+        if settings.get("sound_toggle", True):
+            _notification_manager.play_sound("success")
+
+        tone_names = {"formal": "👔 Resmi / Kurumsal", "casual": "🤝 Samimi / Arkadaşça", "concise": "🎯 Kısa & Öz"}
+        _notification_manager.show_notification(
+            f"✨ Ton Değiştirildi ({tone_names.get(tone, tone)})",
+            f"{selected_text[:50]}... ➜ {res[:50]}..."
+        )
+
+        time.sleep(0.08)
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Ton değiştirme hatası: {e}")
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+
+
 class SystemTrayApp(QSystemTrayIcon):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -540,6 +604,7 @@ class SystemTrayApp(QSystemTrayIcon):
             on_correct=correct_selected_text,
             on_translate=translate_selected_text,
             on_info=generate_knowledge_for_selected_text,
+            on_tone=lambda: change_text_tone("formal"),
             is_active_fn=lambda: correction_active,
             enabled=self.settings.get("floating_pill_enabled", True),
         )
@@ -588,6 +653,11 @@ class SystemTrayApp(QSystemTrayIcon):
         self.knowledge_action = QAction("💡 Anında Bilgi / Cevapla (Alt+E)", self)
         self.knowledge_action.triggered.connect(lambda: threading.Thread(target=generate_knowledge_for_selected_text, daemon=True).start())
         self.menu.addAction(self.knowledge_action)
+
+        # Yazı Tonu Dönüştürücü (Kurumsal / Samimi / Kısa)
+        self.tone_action = QAction("👔 Kurumsal / Resmi Dile Çevir", self)
+        self.tone_action.triggered.connect(lambda: threading.Thread(target=lambda: change_text_tone("formal"), daemon=True).start())
+        self.menu.addAction(self.tone_action)
 
         self.menu.addSeparator()
 

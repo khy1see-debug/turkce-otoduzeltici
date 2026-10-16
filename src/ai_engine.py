@@ -1094,3 +1094,89 @@ def generate_knowledge(
         return wiki.strip()
 
     return None
+
+
+TONE_PROMPTS = {
+    "formal": (
+        "Sen üst düzey bir kurumsal dil ve diplomatik iletişim uzmanısın.\n"
+        "GÖREV: <GİRDİ_METNİ> içindeki metni anlamını koruyarak saygılı, profesyonel, "
+        "resmi ve net bir iş/akademik Türkçesine dönüştür.\n"
+        "Asla açıklama yapma, sadece dönüştürülmüş metni ver."
+    ),
+    "casual": (
+        "Sen samimi ve cana yakın bir sohbet arkadaşısın.\n"
+        "GÖREV: <GİRDİ_METNİ> içindeki metni samimi, sıcak, doğal ve günlük konuşma diline uyarla.\n"
+        "Asla açıklama yapma, sadece dönüştürülmüş metni ver."
+    ),
+    "concise": (
+        "Sen metinleri berraklaştıran usta bir editörsün.\n"
+        "GÖREV: <GİRDİ_METNİ> içindeki metnin laf kalabalığını at, en vurucu ve öz haliyle tek cümleye sıkıştır.\n"
+        "Asla açıklama yapma, sadece özetlenmiş metni ver."
+    ),
+}
+
+
+def rewrite_tone(
+    text: str,
+    tone: str = "formal",
+    api_key: Optional[str] = None,
+    timeout: float = 6.0,
+) -> Optional[str]:
+    """
+    Seçili metnin üslubunu (kurumsal/resmi, samimi/arkadaşça veya kısa/öz) dönüştürür.
+    Öncelikli olarak Gemini ve Groq modellerini kullanır.
+    """
+    if not text or not text.strip():
+        return text
+
+    sys_prompt = TONE_PROMPTS.get(tone, TONE_PROMPTS["formal"])
+    gr_key = get_groq_api_key(api_key)
+    g_key = get_gemini_api_key(api_key)
+    nv_key = get_nvidia_api_key(api_key)
+
+    # 1. Groq ve Gemini paralel yarış
+    if gr_key or g_key or nv_key:
+        active_keys = []
+        if gr_key:
+            active_keys.append(("groq", gr_key))
+        if g_key:
+            active_keys.append(("gemini", g_key))
+        if nv_key:
+            active_keys.append(("nvidia", nv_key))
+
+        if len(active_keys) > 1:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            ex = ThreadPoolExecutor(max_workers=len(active_keys))
+            futures = {}
+            for prov, k in active_keys:
+                if prov == "groq":
+                    futures[ex.submit(call_groq_api, text, sys_prompt=sys_prompt, api_key=k, timeout=timeout)] = "groq"
+                elif prov == "gemini":
+                    futures[ex.submit(call_gemini_api, text, sys_prompt=sys_prompt, api_key=k, timeout=timeout)] = "gemini"
+                elif prov == "nvidia":
+                    futures[ex.submit(call_nvidia_nim, text, api_key=k, timeout=timeout, sys_prompt=sys_prompt)] = "nvidia"
+
+            winner = None
+            for fut in as_completed(futures):
+                try:
+                    cand = fut.result()
+                    if cand and cand.strip() and not is_ai_hallucination(text, cand, mode="correction"):
+                        winner = cand.strip()
+                        break
+                except Exception:
+                    pass
+            try:
+                ex.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+            if winner:
+                return winner
+        elif gr_key:
+            return call_groq_api(text, sys_prompt=sys_prompt, api_key=gr_key, timeout=timeout)
+        elif g_key:
+            return call_gemini_api(text, sys_prompt=sys_prompt, api_key=g_key, timeout=timeout)
+        elif nv_key:
+            return call_nvidia_nim(text, api_key=nv_key, timeout=timeout, sys_prompt=sys_prompt)
+
+    return None
+
