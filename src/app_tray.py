@@ -138,7 +138,23 @@ class Win32GlobalHotkeyThread(threading.Thread):
             while not self.stop_event.is_set():
                 if user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):  # PM_REMOVE = 1
                     if msg.message == 0x0312:  # WM_HOTKEY
-                        target_cb = callbacks.get(msg.wParam)
+                        hid = msg.wParam
+                        # Türkçe Q Klavye AltGr (@ ve €) Koruma Filtresi:
+                        # AltGr tuşu Windows tarafından VK_RMENU (0xA5) + VK_CONTROL (0x11) olarak iletilir.
+                        # Kullanıcı AltGr + Q (@) veya AltGr + E (€) yapıyorsa, bunu kısayol olarak yutma!
+                        is_rmenu = bool(user32.GetAsyncKeyState(0xA5) & 0x8000)
+                        vk = (msg.lParam >> 16) & 0xFFFF
+                        if is_rmenu:
+                            if vk == 0x51:  # 'Q' -> '@'
+                                user32.keybd_event(0, ord('@'), 0x0004, 0)
+                                user32.keybd_event(0, ord('@'), 0x0006, 0)
+                                continue
+                            elif vk == 0x45:  # 'E' -> '€'
+                                user32.keybd_event(0, ord('€'), 0x0004, 0)
+                                user32.keybd_event(0, ord('€'), 0x0006, 0)
+                                continue
+
+                        target_cb = callbacks.get(hid)
                         if target_cb:
                             threading.Thread(target=target_cb, daemon=True).start()
                     user32.TranslateMessage(ctypes.byref(msg))
@@ -166,30 +182,71 @@ class Win32GlobalHotkeyThread(threading.Thread):
         self.stop_event.set()
 
 
+def _release_and_mask_modifiers(extra_vks=(0x51, 0x57, 0x45), max_wait_sec=0.35):
+    """
+    Fiziksel tuşların (Alt, Ctrl, Shift, Q, W, E) bırakılmasını bekler
+    ve Windows'un Menü Çubuğunu (Menu Bar / Focus Steal) tetiklemesini 0xFF maskeleme tuşuyla engeller.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+    user32 = ctypes.windll.user32
+    start = time.time()
+    # 1. Kullanıcının parmaklarını tuşlardan kaldırmasını bekle (en fazla max_wait_sec)
+    while (time.time() - start) < max_wait_sec:
+        alt_down = bool(user32.GetAsyncKeyState(0x12) & 0x8000)
+        ctrl_down = bool(user32.GetAsyncKeyState(0x11) & 0x8000)
+        shift_down = bool(user32.GetAsyncKeyState(0x10) & 0x8000)
+        any_extra = any(bool(user32.GetAsyncKeyState(vk) & 0x8000) for vk in extra_vks)
+        if not (alt_down or ctrl_down or shift_down or any_extra):
+            break
+        time.sleep(0.01)
+
+    # 2. Donanım düzeyinde tüm niteleyicileri (modifiers) serbest bırak
+    user32.keybd_event(0x12, 0, 2, 0)  # Alt UP
+    user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
+    user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
+    for vk in extra_vks:
+        user32.keybd_event(vk, 0, 2, 0)
+
+    # 3. Windows Menü Çubuğu (Menu Bar / Focus Steal) maskesi!
+    # Alt tuşu tek başına bırakıldığında Windows pencerenin Dosya/Düzen menüsüne odaklanır.
+    # 0xFF (tanımsız sanal tuş) gönderilerek menü çubuğunun odağı çalması %100 engellenir.
+    user32.keybd_event(0xFF, 0, 0, 0)
+    user32.keybd_event(0xFF, 0, 2, 0)
+    time.sleep(0.015)
+
+
 def _send_win32_key_combination(ctrl_key: str):
     """Windows'ta basılı olabilecek tuşları serbest bırakarak güvenli Ctrl+C veya Ctrl+V gönderir."""
     if sys.platform == "win32":
         try:
             import ctypes
             user32 = ctypes.windll.user32
-            # 1. Alt, Ctrl, Shift, Q tuşlarını donanım düzeyinde serbest bırak
-            user32.keybd_event(0x12, 0, 2, 0)  # VK_MENU (Alt) UP
-            user32.keybd_event(0x51, 0, 2, 0)  # 'Q' UP
-            user32.keybd_event(0x11, 0, 2, 0)  # VK_CONTROL UP
-            user32.keybd_event(0x10, 0, 2, 0)  # VK_SHIFT UP
-            time.sleep(0.02)
+            # 1. Alt, Ctrl, Shift ve harf tuşlarını temizle
+            _release_and_mask_modifiers(max_wait_sec=0.2)
 
             # 2. Ctrl + key gönder
             vk_code = 0x43 if ctrl_key.lower() == 'c' else 0x56  # 0x43 = 'C', 0x56 = 'V'
             user32.keybd_event(0x11, 0, 0, 0)  # Ctrl DOWN
             time.sleep(0.02)
             user32.keybd_event(vk_code, 0, 0, 0)  # Key DOWN
-            time.sleep(0.03)
+            time.sleep(0.025)
             user32.keybd_event(vk_code, 0, 2, 0)  # Key UP
-            time.sleep(0.02)
+            time.sleep(0.015)
             user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
+            time.sleep(0.015)
         except Exception as e:
             print(f"Key send error: {e}")
+        finally:
+            try:
+                user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
+                user32.keybd_event(0x12, 0, 2, 0)  # Alt UP
+                user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
+                user32.keybd_event(0xFF, 0, 0, 0)
+                user32.keybd_event(0xFF, 0, 2, 0)
+            except Exception:
+                pass
 
 
 SENTINEL_CLIPBOARD = "\x00__TURKCE_COPY_SENTINEL__\x00"
@@ -201,27 +258,7 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
     akıllı otomasyon ile imlecin solundaki satırı (Shift+Home) otomatik seçip yakalar.
     (orijinal_pano, yakalanan_metin) döner.
     """
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            user32 = ctypes.windll.user32
-            # Parmaklar Alt/Ctrl/Q/W tuşlarından çekilene kadar bekle (hızlı yoklama)
-            for _ in range(8):
-                alt_down = bool(user32.GetAsyncKeyState(0x12) & 0x8000)
-                q_down = bool(user32.GetAsyncKeyState(0x51) & 0x8000)
-                w_down = bool(user32.GetAsyncKeyState(0x57) & 0x8000)
-                if not alt_down and not q_down and not w_down:
-                    break
-                time.sleep(0.012)
-            # Tuşları donanım düzeyinde serbest bırak
-            user32.keybd_event(0x12, 0, 2, 0)  # Alt UP
-            user32.keybd_event(0x51, 0, 2, 0)  # Q UP
-            user32.keybd_event(0x57, 0, 2, 0)  # W UP
-            user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
-            user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
-            time.sleep(0.01)
-        except Exception:
-            pass
+    _release_and_mask_modifiers()
 
     try:
         orig = pyperclip.paste()
@@ -236,8 +273,8 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
     # 1. Standart Ctrl+C kopyalama denemesi
     _send_win32_key_combination('c')
     captured = ""
-    for _ in range(7):
-        time.sleep(0.015)
+    for _ in range(8):
+        time.sleep(0.02)
         try:
             t = pyperclip.paste()
             if t != sentinel and t.strip():
@@ -251,25 +288,29 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
         try:
             import ctypes
             user32 = ctypes.windll.user32
+            _release_and_mask_modifiers(max_wait_sec=0.15)
+
             # Shift + Home (imleçten satır başına kadar seç)
             user32.keybd_event(0x10, 0, 0, 0)  # Shift DOWN
-            time.sleep(0.01)
+            time.sleep(0.015)
             user32.keybd_event(0x24, 0, 1, 0)  # Home DOWN
-            time.sleep(0.015)
+            time.sleep(0.02)
             user32.keybd_event(0x24, 0, 3, 0)  # Home UP
-            time.sleep(0.01)
-            user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
             time.sleep(0.015)
+            user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
+            time.sleep(0.02)
 
             _send_win32_key_combination('c')
-            for _ in range(6):
-                time.sleep(0.015)
+            for _ in range(8):
+                time.sleep(0.02)
                 t = pyperclip.paste()
                 if t != sentinel and t.strip():
                     captured = t
                     break
         except Exception:
             pass
+        finally:
+            _release_and_mask_modifiers(max_wait_sec=0.1)
 
     return orig, captured
 

@@ -726,7 +726,7 @@ class MainWindow(QMainWindow):
         hotkey_layout.addWidget(self.hotkey_edit)
         hotkey_vbox.addLayout(hotkey_layout)
 
-        hotkey_info = QLabel("💡 <b>Alt+Q:</b> İmla, bağlam ve TDK düzeltmesi | <b>Alt+W:</b> Anında Türkçe ⇄ İngilizce Akıllı Çeviri.<br><i>(Metni fareyle seçmeden de imleç satır sonundayken basabilirsiniz; satırı otomatik yakalar.)</i>")
+        hotkey_info = QLabel("💡 <b>Alt+Q:</b> İmla, bağlam ve TDK düzeltmesi | <b>Alt+W:</b> TR ⇄ EN Anında Çeviri | <b>Alt+E:</b> Hızlı Soru & Bilgi Motoru<br><i>(Türkçe klavyede <b>@</b> ve <b>€</b> için AltGr tuşu donanım düzeyinde korunur; metni seçmeden imleç satır sonundayken de basabilirsiniz.)</i>")
         hotkey_info.setWordWrap(True)
         hotkey_info.setStyleSheet("color: #38bdf8; font-size: 11px; margin-top: 4px;")
         hotkey_vbox.addWidget(hotkey_info)

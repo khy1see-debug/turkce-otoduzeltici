@@ -51,13 +51,26 @@ sys.excepthook = excepthook
 import threading
 threading.excepthook = lambda args: excepthook(args.exc_type, args.exc_value, args.exc_traceback)
 
+def ensure_single_instance():
+    """Çakışan veya önceki kopya süreçleri temizler, tek bir örneğin çalışmasını garanti eder."""
+    if sys.platform != "win32":
+        return
+    import subprocess
+    current_pid = os.getpid()
+    try:
+        cmd = f"Get-Process turkce-otoduzeltici -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {current_pid} }} | Stop-Process -Force"
+        subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, timeout=5)
+    except Exception:
+        pass
+
 def run():
     # Argüman kontrolü (CLI / Web / Parametreler)
     if len(sys.argv) > 1 and not sys.argv[1].startswith("-psn"):
         from src.cli import main as cli_main
         cli_main()
     else:
-        # Masaüstü GUI & Sistem Tepsisi Modu
+        # Masaüstü GUI & Sistem Tepsisi Modu: Eski kopyaları temizle ve başlat
+        ensure_single_instance()
         from src.app_tray import main as tray_main
         tray_main()
 

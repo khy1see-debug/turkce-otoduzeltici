@@ -233,12 +233,18 @@ class SelfLearningManager:
                 orig_text = ev_row[1] if ev_row else ""
 
                 # Update the most recent correction event for this word
-                conn.execute('''
-                    UPDATE correction_events
-                    SET user_accepted = 0
-                    WHERE corrected_text = ? AND user_accepted IS NULL
-                    ORDER BY timestamp DESC LIMIT 1
-                ''', (word,))
+                if ev_row:
+                    conn.execute('''
+                        UPDATE correction_events
+                        SET user_accepted = 0
+                        WHERE id = ?
+                    ''', (ev_row[0],))
+                else:
+                    conn.execute('''
+                        UPDATE correction_events
+                        SET user_accepted = 0
+                        WHERE corrected_text = ? AND user_accepted IS NULL
+                    ''', (word,))
 
                 corr_tokens = {
                     turkish_lower(re.split(r"['’]", t)[0])
