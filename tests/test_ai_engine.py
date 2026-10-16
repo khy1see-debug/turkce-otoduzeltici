@@ -266,5 +266,55 @@ def test_is_ai_hallucination_knowledge():
     assert ai_engine.is_ai_hallucination("köpekler", too_short, mode="knowledge") is True
 
 
+def test_get_groq_api_key_explicit():
+    assert ai_engine.get_groq_api_key("gsk_test123") == "gsk_test123"
 
 
+def test_get_groq_api_key_env(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_env_key")
+    assert ai_engine.get_groq_api_key() == "gsk_env_key"
+
+
+def test_test_groq_connection_empty():
+    ok, msg, latency = ai_engine.test_groq_connection("")
+    assert not ok
+    assert "boş" in msg.lower()
+
+
+def test_test_groq_connection_mocked():
+    fake_response = MagicMock()
+    fake_response.status = 200
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value.__enter__.return_value = fake_response
+        ok, msg, latency = ai_engine.test_groq_connection("gsk_valid", "llama-3.3-70b-versatile")
+        assert ok
+        assert "başarılı" in msg.lower()
+
+
+def test_call_groq_api_success():
+    fake_response = MagicMock()
+    fake_response.status = 200
+    fake_response.read.return_value = b'''{
+        "choices": [
+            {
+                "message": {
+                    "content": "Bug\xc3\xbcn hava \xc3\xa7ok g\xc3\xbczel."
+                }
+            }
+        ]
+    }'''
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value.__enter__.return_value = fake_response
+        result = ai_engine.call_groq_api(
+            "bugun hava cok guzel",
+            api_key="gsk_dummy",
+            model="llama-3.3-70b-versatile"
+        )
+        assert result == "Bugün hava çok güzel."
+
+
+def test_call_groq_api_failure():
+    with patch("urllib.request.urlopen", side_effect=Exception("Groq network error")):
+        result = ai_engine.call_groq_api("test", api_key="gsk_dummy")
+        assert result is None
