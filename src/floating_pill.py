@@ -164,18 +164,30 @@ class FloatingCorrectionPill(QWidget):
         if sys.platform != "win32":
             return
         try:
+            import ctypes.wintypes
             user32 = ctypes.windll.user32
-            hwnd = int(self.winId())
+            hwnd = ctypes.wintypes.HWND(int(self.winId()))
             GWL_EXSTYLE = -20
             WS_EX_NOACTIVATE = 0x08000000
             WS_EX_TOOLWINDOW = 0x00000080
             WS_EX_TOPMOST = 0x00000008
-            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            user32.SetWindowLongW(
-                hwnd,
-                GWL_EXSTYLE,
-                style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-            )
+
+            # 64-bit ve 32-bit güvenli SetWindowLong / GetWindowLong
+            get_window_long = getattr(user32, "GetWindowLongPtrW", getattr(user32, "GetWindowLongW", None))
+            set_window_long = getattr(user32, "SetWindowLongPtrW", getattr(user32, "SetWindowLongW", None))
+
+            if get_window_long and set_window_long:
+                get_window_long.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
+                get_window_long.restype = ctypes.c_long
+                set_window_long.argtypes = [ctypes.wintypes.HWND, ctypes.c_int, ctypes.c_long]
+                set_window_long.restype = ctypes.c_long
+
+                style = get_window_long(hwnd, GWL_EXSTYLE)
+                set_window_long(
+                    hwnd,
+                    GWL_EXSTYLE,
+                    style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+                )
         except Exception:
             pass
 
@@ -264,6 +276,8 @@ class FloatingCorrectionPill(QWidget):
             pos_x = max(geom.left() + 6, min(pos_x, geom.right() - w - 6))
             if pos_y < geom.top() + 6:
                 pos_y = screen_y + 20  # Üstte yer yoksa imlecin altında göster
+            # Alt kenar taşmasını önle (görev çubuğuna çarpmasın)
+            pos_y = max(geom.top() + 6, min(pos_y, geom.bottom() - h - 6))
 
         self.move(pos_x, pos_y)
         self.show()
@@ -281,10 +295,13 @@ class FloatingCorrectionPill(QWidget):
         """Hedef uygulamanın pencere odağını korur."""
         if sys.platform == "win32" and self._target_hwnd:
             try:
+                import ctypes.wintypes
                 user32 = ctypes.windll.user32
+                user32.GetForegroundWindow.restype = ctypes.wintypes.HWND
+                user32.SetForegroundWindow.argtypes = [ctypes.wintypes.HWND]
                 fg = user32.GetForegroundWindow()
                 if fg != self._target_hwnd:
-                    user32.SetForegroundWindow(self._target_hwnd)
+                    user32.SetForegroundWindow(ctypes.wintypes.HWND(self._target_hwnd))
                     time.sleep(0.015)
             except Exception:
                 pass
