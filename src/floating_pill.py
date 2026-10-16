@@ -70,6 +70,20 @@ QPushButton#transBtn:hover {
     border: 1px solid #38bdf8;
     color: #ffffff;
 }
+QPushButton#infoBtn {
+    background-color: #1e1e2e;
+    color: #facc15;
+    border: 1px solid #ca8a04;
+    border-radius: 10px;
+    padding: 4px 9px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+}
+QPushButton#infoBtn:hover {
+    background-color: #ca8a04;
+    color: #000000;
+}
 QPushButton#closeBtn {
     background-color: transparent;
     color: #94a3b8;
@@ -96,6 +110,7 @@ class FloatingCorrectionPill(QWidget):
         self,
         on_correct: Callable[[], None],
         on_translate: Callable[[], None],
+        on_info: Optional[Callable[[], None]] = None,
         is_active_fn: Optional[Callable[[], bool]] = None,
         enabled: bool = True,
         parent: Optional[QWidget] = None,
@@ -103,6 +118,7 @@ class FloatingCorrectionPill(QWidget):
         super().__init__(parent)
         self._on_correct = on_correct
         self._on_translate = on_translate
+        self._on_info = on_info
         self._is_active_fn = is_active_fn or (lambda: True)
         self.enabled = enabled
 
@@ -203,6 +219,14 @@ class FloatingCorrectionPill(QWidget):
         self.trans_btn.clicked.connect(self._trigger_translate)
         pill_layout.addWidget(self.trans_btn)
 
+        self.info_btn = QPushButton("💡 Bilgi")
+        self.info_btn.setObjectName("infoBtn")
+        self.info_btn.setCursor( QCursor(Qt.CursorShape.PointingHandCursor) )
+        self.info_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.info_btn.setToolTip("Seçili konu hakkında anında bilgi üret (Alt+E)")
+        self.info_btn.clicked.connect(self._trigger_info)
+        pill_layout.addWidget(self.info_btn)
+
         self.close_btn = QPushButton("✕")
         self.close_btn.setObjectName("closeBtn")
         self.close_btn.setCursor( QCursor(Qt.CursorShape.PointingHandCursor) )
@@ -276,6 +300,14 @@ class FloatingCorrectionPill(QWidget):
         self.hide_pill()
         self._restore_target_focus()
         threading.Thread(target=self._on_translate, daemon=True).start()
+
+    def _trigger_info(self):
+        if not self._on_info:
+            return
+        import threading
+        self.hide_pill()
+        self._restore_target_focus()
+        threading.Thread(target=self._on_info, daemon=True).start()
 
     @staticmethod
     def _get_window_rect(hwnd: int) -> Optional[Tuple[int, int, int, int]]:

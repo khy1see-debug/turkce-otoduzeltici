@@ -235,4 +235,36 @@ def test_free_web_translate_mocked():
         assert res == "Ayarlar ve bildirimler"
 
 
+def test_free_wiki_summary_mocked():
+    fake_response = MagicMock()
+    fake_response.status = 200
+    fake_response.read.return_value = b'{"extract": "K\xc3\xb6pek, k\xc3\xb6pekgiller familyas\xc4\xb1na ait evcil bir memelidir. 400\'den fazla \xc4\xb1rk\xc4\xb1 vard\xc4\xb1r."}'
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value.__enter__.return_value = fake_response
+        res = ai_engine.free_wiki_summary("köpekler hakkında bilgi ver")
+        assert "Köpek" in res
+        assert "memelidir" in res
+
+
+def test_generate_knowledge_mocked():
+    with patch("src.ai_engine.call_nvidia_nim", return_value="Köpekler son derece sadık ve zeki evcil hayvanlardır. İnsanlarla binlerce yıldır birlikte yaşarlar."):
+        with patch("src.ai_engine.get_nvidia_api_key", return_value="fake_nv_key"):
+            res = ai_engine.generate_knowledge("köpekler", provider="nvidia")
+            assert res is not None
+            assert "Köpekler" in res
+
+
+def test_is_ai_hallucination_knowledge():
+    valid = "Köpekler yaklaşık 15.000 yıl önce evcilleştirilen ilk canlılardandır. Koku alma duyuları çok gelişmiştir."
+    assert ai_engine.is_ai_hallucination("köpekler", valid, mode="knowledge") is False
+
+    too_long = " ".join(["bilgi"] * 140)
+    assert ai_engine.is_ai_hallucination("köpekler", too_long, mode="knowledge") is True
+
+    too_short = "köpek"
+    assert ai_engine.is_ai_hallucination("köpekler", too_short, mode="knowledge") is True
+
+
+
 

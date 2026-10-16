@@ -293,6 +293,12 @@ def correct_selected_text():
         )
         return
 
+    # Eğer kullanıcı metnin başına ? veya /bilgi koyduysa doğrudan anında bilgi motoruna yönlendir
+    clean_stripped = selected_text.strip()
+    if clean_stripped.startswith(("?", "/bilgi", "/ai", "/cevap")):
+        generate_knowledge_for_selected_text(pre_captured=(original_clipboard, selected_text))
+        return
+
     try:
         # 1. Önce yerel deterministik motoru çalıştır (~2ms: TDK, bitişik kelime, argo, devrik koruma)
         settings = settings_manager.load_settings()
@@ -439,12 +445,81 @@ def translate_selected_text():
                 pass
 
 
+def generate_knowledge_for_selected_text(pre_captured=None):
+    """Seçili metni (veya o anki satırı) kopyalar, AI ile anında net bilgi/özet üretip yerine yapıştırır (Ghost Copilot)."""
+    global correction_active
+    if not correction_active:
+        return
+
+    if pre_captured:
+        original_clipboard, selected_text = pre_captured
+    else:
+        original_clipboard, selected_text = _capture_active_text()
+
+    if not selected_text or not selected_text.strip():
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+        _notification_manager.show_notification(
+            "⚠️ Metin Bulunamadı",
+            "Lütfen hakkında bilgi almak istediğiniz konuyu seçin veya satır sonuna gelin."
+        )
+        return
+
+    try:
+        from src.ai_engine import generate_knowledge
+        info_res = generate_knowledge(selected_text)
+
+        if not info_res or not info_res.strip():
+            _notification_manager.show_notification(
+                "⚠️ Bilgi Alınamadı",
+                "Yapay zeka yanıt veremedi veya konu hakkında özet bulunamadı."
+            )
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            return
+
+        info_text = info_res.strip()
+        pyperclip.copy(info_text)
+        time.sleep(0.04)
+        _send_win32_key_combination('v')
+
+        settings = settings_manager.load_settings()
+        if settings.get("sound_toggle", True):
+            _notification_manager.play_sound("success")
+
+        preview = info_text[:80] + "..." if len(info_text) > 80 else info_text
+        _notification_manager.show_notification(
+            "💡 Anında Bilgi (Ghost Copilot)",
+            preview
+        )
+
+        time.sleep(0.08)
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Bilgi üretme hatası: {e}")
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+
+
 class SystemTrayApp(QSystemTrayIcon):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.app_icon = create_icon_image()
         self.setIcon(self.app_icon)
-        self.setToolTip("Türkçe Otomatik Düzeltici (Alt+Q: Düzelt | Alt+W: Çevir)")
+        self.setToolTip("Türkçe Otomatik Düzeltici (Alt+Q: Düzelt | Alt+W: Çevir | Alt+E: Bilgi)")
 
         _notification_manager.set_tray_icon(self)
 
@@ -459,6 +534,7 @@ class SystemTrayApp(QSystemTrayIcon):
         self.floating_pill = FloatingCorrectionPill(
             on_correct=correct_selected_text,
             on_translate=translate_selected_text,
+            on_info=generate_knowledge_for_selected_text,
             is_active_fn=lambda: correction_active,
             enabled=self.settings.get("floating_pill_enabled", True),
         )
@@ -502,6 +578,11 @@ class SystemTrayApp(QSystemTrayIcon):
         self.translate_action = QAction("🌍 Akıllı Çeviri (Alt+W - TR ⇄ EN)", self)
         self.translate_action.triggered.connect(lambda: threading.Thread(target=translate_selected_text, daemon=True).start())
         self.menu.addAction(self.translate_action)
+
+        # Anında Bilgi / Cevapla Kısayol Bilgisi / Tetikleyici
+        self.knowledge_action = QAction("💡 Anında Bilgi / Cevapla (Alt+E)", self)
+        self.knowledge_action.triggered.connect(lambda: threading.Thread(target=generate_knowledge_for_selected_text, daemon=True).start())
+        self.menu.addAction(self.knowledge_action)
 
         self.menu.addSeparator()
 
@@ -628,11 +709,12 @@ class SystemTrayApp(QSystemTrayIcon):
                 self._win32_hotkey_thread = None
             mappings = [
                 (1001, hotkey_str, correct_selected_text),
-                (1002, "alt+w", translate_selected_text)
+                (1002, "alt+w", translate_selected_text),
+                (1003, "alt+e", generate_knowledge_for_selected_text)
             ]
             self._win32_hotkey_thread = Win32GlobalHotkeyThread(mappings)
             self._win32_hotkey_thread.start()
-            print(f"[+] Win32 Donanım Kısayolları Devrede: {hotkey_str} (Düzeltme), Alt+W (Çeviri)")
+            print(f"[+] Win32 Donanım Kısayolları Devrede: {hotkey_str} (Düzeltme), Alt+W (Çeviri), Alt+E (Bilgi)")
 
         self.current_hotkey = hotkey_str
 
@@ -671,7 +753,7 @@ def main():
 
     _notification_manager.show_notification(
         "🇹🇷 Türkçe Otomatik Düzeltici",
-        f"Çalışıyor! Düzeltme: {tray_icon.current_hotkey.upper()} | Çeviri: ALT+W"
+        f"Çalışıyor! Düzeltme: {tray_icon.current_hotkey.upper()} | Çeviri: ALT+W | Bilgi: ALT+E"
     )
 
     sys.exit(app.exec())

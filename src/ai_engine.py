@@ -443,9 +443,13 @@ def is_ai_hallucination(input_text: str, output_text: str, mode: str = "correcti
             return True
         if in_len > 5 and out_len > max(in_len * 3.5, 40):
             return True
+    elif mode == "knowledge":
+        # Bilgi yanıtında sohbet mesajı uzunluğu (en fazla 120 kelime)
+        if out_len > 130 or out_len < 3:
+            return True
 
     # 3. Paragraf / Liste patlaması (Girdide yeni satır yokken çıktının 2+ paragraf veya liste olması)
-    if "\n" not in in_clean:
+    if mode != "knowledge" and "\n" not in in_clean:
         if "\n\n" in out_clean or out_clean.count("\n") >= 2:
             return True
         if any(line.strip().startswith(("- ", "* ", "1. ", "2. ")) for line in out_clean.splitlines()):
@@ -742,5 +746,117 @@ def translate_with_ai(
             print(f"[!] AI çeviri halüsinasyon/sohbet yanıtı engellendi: {res[:60]}...", file=sys.stderr)
             return None
         return res
+
+    return None
+
+
+KNOWLEDGE_SYSTEM_PROMPT = (
+    "Sen sohbet ve mesajlaşma uygulamaları (Discord, WhatsApp vb.) için doğrudan metin kutusuna çalışan ultra hızlı bir anında bilgi motorusun (Ghost Copilot).\n"
+    "GÖREV: Kullanıcının istediği konu, soru veya bilgi talebi hakkında doğrudan, net, doğru ve ilgi çekici bilgi ver.\n"
+    "\n"
+    "HAYATİ VE KESİN KURALLAR:\n"
+    "1. FORMAT: Bir Discord/sohbet mesajına yakışır, akıcı, net ve arkadaş ortamında paylaşılabilecek 2 ila 3 cümlelik somut bir özet yaz.\n"
+    "2. UZUNLUK: 30 ila 70 kelime arasında tut. Asla sayfalarca makale veya madde işareti yazma.\n"
+    "3. SIFIR GİRİŞ VE SIFIR GEVEZELİK: 'Tabii ki!', 'İşte köpekler hakkında bilgi:', 'Umarım faydalı olur' gibi selamlama, önsöz veya kapanış laf kalabalığı ASLA YAPMA.\n"
+    "4. Doğrudan konunun kendisiyle ve bilgisiyle başla. Tırnak içine alma."
+)
+
+
+def free_wiki_summary(query: str, timeout: float = 3.5) -> Optional[str]:
+    """
+    Wikipedia API üzerinden sıfır maliyetli ve API kotası gerektirmeyen anında bilgi özeti döner.
+    """
+    clean = query.strip()
+    for prefix in ["bana", "hakkında", "bilgi", "ver", "nedir", "kimdir", "kısaca", "hakkinda", "?", "/bilgi", "/ai"]:
+        clean = re.sub(rf"\b{re.escape(prefix)}\b", "", clean, flags=re.IGNORECASE).strip()
+    clean = clean.strip("?.,;:! ")
+    if not clean:
+        clean = query.strip("?.,;:! ")
+    try:
+        import urllib.parse
+        url = "https://tr.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(clean)
+        req = urllib.request.Request(url, headers={"User-Agent": "Turkce-Otoduzeltici/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                extract = data.get("extract")
+                if extract and extract.strip():
+                    sentences = re.split(r'(?<=[.!?])\s+', extract.strip())
+                    return " ".join(sentences[:3]).strip()
+    except Exception:
+        pass
+    return None
+
+
+def generate_knowledge(
+    query: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    provider: Optional[str] = None,
+    timeout: float = 6.0,
+) -> Optional[str]:
+    """
+    Kullanıcının seçtiği konu veya soru hakkında Discord/sohbet uyumlu anında bilgi üretir.
+    Gemini ve NVIDIA NIM modellerini dener, yanıt alamazsa Wikipedia özetine geri düşer.
+    """
+    if not query or not query.strip():
+        return None
+
+    clean_query = query.strip()
+    if clean_query.startswith("?"):
+        clean_query = clean_query[1:].strip()
+    for cmd in ["/bilgi", "/ai", "/cevap"]:
+        if clean_query.lower().startswith(cmd):
+            clean_query = clean_query[len(cmd):].strip()
+
+    try:
+        settings = settings_manager.load_settings()
+        target_provider = provider or settings.get("ai_provider", "auto")
+    except Exception:
+        target_provider = provider or "auto"
+
+    res = None
+    if target_provider == "gemini":
+        res = call_gemini_api(clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=api_key, model=model, timeout=timeout)
+    elif target_provider == "nvidia":
+        res = call_nvidia_nim(clean_query, api_key=api_key, model=model, timeout=timeout, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT)
+    else:
+        g_key = get_gemini_api_key(api_key)
+        nv_key = get_nvidia_api_key(api_key)
+        if g_key and nv_key:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            ex = ThreadPoolExecutor(max_workers=2)
+            futures = {
+                ex.submit(call_gemini_api, clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=g_key, model=model, timeout=timeout): "gemini",
+                ex.submit(call_nvidia_nim, clean_query, api_key=nv_key, model=model, timeout=timeout, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT): "nvidia",
+            }
+            winner = None
+            for fut in as_completed(futures):
+                try:
+                    cand = fut.result()
+                    if cand and cand.strip() and not is_ai_hallucination(clean_query, cand, mode="knowledge"):
+                        winner = cand.strip()
+                        break
+                except Exception:
+                    pass
+            try:
+                ex.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+            if winner:
+                return winner
+        elif g_key:
+            res = call_gemini_api(clean_query, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT, api_key=g_key, model=model, timeout=timeout)
+        elif nv_key:
+            res = call_nvidia_nim(clean_query, api_key=nv_key, model=model, timeout=timeout, sys_prompt=KNOWLEDGE_SYSTEM_PROMPT)
+
+    if res and res.strip():
+        if not is_ai_hallucination(clean_query, res, mode="knowledge"):
+            return res.strip()
+
+    # Yedek: Wikipedia özeti
+    wiki = free_wiki_summary(clean_query)
+    if wiki and wiki.strip():
+        return wiki.strip()
 
     return None
