@@ -219,11 +219,11 @@ class FloatingCorrectionPill(QWidget):
         self.trans_btn.clicked.connect(self._trigger_translate)
         pill_layout.addWidget(self.trans_btn)
 
-        self.info_btn = QPushButton("💡 Bilgi")
+        self.info_btn = QPushButton("💡 Cevapla")
         self.info_btn.setObjectName("infoBtn")
         self.info_btn.setCursor( QCursor(Qt.CursorShape.PointingHandCursor) )
         self.info_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.info_btn.setToolTip("Seçili konu hakkında anında bilgi üret (Alt+E)")
+        self.info_btn.setToolTip("Bu soruya arkadaş ağzıyla anında cevap üret (Alt+E)")
         self.info_btn.clicked.connect(self._trigger_info)
         pill_layout.addWidget(self.info_btn)
 

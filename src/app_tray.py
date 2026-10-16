@@ -446,7 +446,7 @@ def translate_selected_text():
 
 
 def generate_knowledge_for_selected_text(pre_captured=None):
-    """Seçili metni (veya o anki satırı) kopyalar, AI ile anında net bilgi/özet üretip yerine yapıştırır (Ghost Copilot)."""
+    """Seçili metni (veya o anki satırı ya da panodaki soruyu) kopyalar, AI ile arkadaş ağzından anında cevap üretip kutuya yapıştırır (Ghost Copilot)."""
     global correction_active
     if not correction_active:
         return
@@ -456,26 +456,30 @@ def generate_knowledge_for_selected_text(pre_captured=None):
     else:
         original_clipboard, selected_text = _capture_active_text()
 
-    if not selected_text or not selected_text.strip():
-        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
-            try:
-                pyperclip.copy(original_clipboard)
-            except Exception:
-                pass
+    # Eğer metin kutusunda yazı yoksa, panodaki en son kopyalanmış soruya bak (Ctrl+C & Alt+E akışı)
+    is_clipboard_source = False
+    target_query = selected_text
+
+    if not target_query or not target_query.strip():
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD and original_clipboard.strip():
+            target_query = original_clipboard.strip()
+            is_clipboard_source = True
+
+    if not target_query or not target_query.strip():
         _notification_manager.show_notification(
-            "⚠️ Metin Bulunamadı",
-            "Lütfen hakkında bilgi almak istediğiniz konuyu seçin veya satır sonuna gelin."
+            "⚠️ Soru/Konu Bulunamadı",
+            "Bir soru yazın, metin seçin veya arkadaşınızın sorusunu kopyalayıp (Ctrl+C) Alt+E yapın."
         )
         return
 
     try:
         from src.ai_engine import generate_knowledge
-        info_res = generate_knowledge(selected_text)
+        info_res = generate_knowledge(target_query)
 
         if not info_res or not info_res.strip():
             _notification_manager.show_notification(
-                "⚠️ Bilgi Alınamadı",
-                "Yapay zeka yanıt veremedi veya konu hakkında özet bulunamadı."
+                "⚠️ Cevap Üretilemedi",
+                "Yapay zeka yanıt veremedi veya konu hakkında yanıt bulunamadı."
             )
             if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
                 try:
@@ -494,8 +498,9 @@ def generate_knowledge_for_selected_text(pre_captured=None):
             _notification_manager.play_sound("success")
 
         preview = info_text[:80] + "..." if len(info_text) > 80 else info_text
+        title = "💡 Arkadaş Cevabı Yapıştırıldı" if is_clipboard_source else "💡 Anında Soru Yanıtı"
         _notification_manager.show_notification(
-            "💡 Anında Bilgi (Ghost Copilot)",
+            title,
             preview
         )
 
