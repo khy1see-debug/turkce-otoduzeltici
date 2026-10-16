@@ -26,75 +26,83 @@ from PyQt6.QtGui import QColor, QCursor
 
 PILL_STYLE = """
 QFrame#pillContainer {
-    background-color: rgba(24, 24, 37, 245);
-    border: 1px solid #3b4261;
-    border-radius: 15px;
+    background-color: rgba(15, 23, 42, 0.94);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    border-radius: 16px;
 }
 QLabel#brandBadge {
     color: #f8fafc;
     font-family: 'Segoe UI', system-ui, sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: bold;
-    padding-left: 4px;
-    padding-right: 2px;
+    padding-left: 5px;
+    padding-right: 3px;
     background: transparent;
 }
 QPushButton#fixBtn {
-    background-color: #e30a17;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e11d48, stop:1 #be123c);
     color: #ffffff;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 10px;
-    padding: 4px 10px;
+    padding: 5px 11px;
     font-family: 'Segoe UI', system-ui, sans-serif;
     font-size: 11px;
     font-weight: bold;
 }
 QPushButton#fixBtn:hover {
-    background-color: #ff1f2d;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f43f5e, stop:1 #e11d48);
+    border: 1px solid #fda4af;
 }
 QPushButton#fixBtn:pressed {
-    background-color: #b80712;
+    background: #9f1239;
 }
 QPushButton#transBtn {
-    background-color: #1e293b;
-    color: #e2e8f0;
-    border: 1px solid #334155;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #0369a1);
+    color: #ffffff;
+    border: 1px solid rgba(56, 189, 248, 0.35);
     border-radius: 10px;
-    padding: 4px 9px;
+    padding: 5px 11px;
     font-family: 'Segoe UI', system-ui, sans-serif;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: bold;
 }
 QPushButton#transBtn:hover {
-    background-color: #334155;
-    border: 1px solid #38bdf8;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #38bdf8, stop:1 #0284c7);
     color: #ffffff;
+    border: 1px solid #7dd3fc;
+}
+QPushButton#transBtn:pressed {
+    background: #075985;
 }
 QPushButton#infoBtn {
-    background-color: #1e1e2e;
-    color: #facc15;
-    border: 1px solid #ca8a04;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #b45309);
+    color: #ffffff;
+    border: 1px solid rgba(251, 191, 36, 0.35);
     border-radius: 10px;
-    padding: 4px 9px;
+    padding: 5px 11px;
     font-family: 'Segoe UI', system-ui, sans-serif;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: bold;
 }
 QPushButton#infoBtn:hover {
-    background-color: #ca8a04;
-    color: #000000;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f59e0b, stop:1 #d97706);
+    color: #ffffff;
+    border: 1px solid #fde68a;
+}
+QPushButton#infoBtn:pressed {
+    background: #92400e;
 }
 QPushButton#closeBtn {
     background-color: transparent;
     color: #94a3b8;
     border: none;
     border-radius: 9px;
-    padding: 2px 5px;
+    padding: 3px 6px;
     font-size: 11px;
     font-weight: bold;
 }
 QPushButton#closeBtn:hover {
-    background-color: rgba(239, 68, 68, 0.25);
+    background-color: rgba(239, 68, 68, 0.28);
     color: #f87171;
 }
 """
