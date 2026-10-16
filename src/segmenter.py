@@ -32,15 +32,20 @@ def segment_text(text: str) -> List[str]:
         max_j = min(n + 1, i + MAX_WORD_LEN + 1)
         for j in range(i + 1, max_j):
             chunk = clean_text[i:j]
-            deasc = deasciify_word(chunk)
+            deasc = deasciify_word(chunk, max_indices=5)
             
             # 1. Tam geçerli kelime
             target_word = deasc if is_valid_word(deasc) else (chunk if is_valid_word(chunk) else None)
             
             if target_word:
-                # Eğer kelime de, da, mi, mı gibi kritik gramer kelimesi ise ekstra ceza verme
-                if target_word in CRITICAL_GRAMMAR_WORDS or target_word in {"su", "ev", "at", "ay", "el", "it", "ot"}:
+                # Sadece gerçek bitişik bağlaç/soru ekleri (de, da, mi, mı, mu, mü, ki, ve) 0 ceza alır
+                if target_word in {"de", "da", "mi", "mı", "mu", "mü", "ki", "ve"}:
                     penalty = 0.0
+                elif len(target_word) <= 2 and (
+                    target_word in CRITICAL_GRAMMAR_WORDS
+                    or target_word in {"su", "ev", "at", "ay", "el", "it", "ot"}
+                ):
+                    penalty = -2.5
                 elif len(target_word) <= 2:
                     penalty = -5.0  # Anlamsız 2 harfli parçalama cezası
                 else:
@@ -52,7 +57,7 @@ def segment_text(text: str) -> List[str]:
                     best_match[j] = (i, target_word)
             else:
                 # 2. Harf hatası düzeltme (örn: kanak -> kanka, geliyorusn -> geliyorsun)
-                if len(chunk) >= 4 or j == n:
+                if len(chunk) >= 4:
                     corrected = correct_word(chunk)
                     if is_valid_word(corrected) and corrected != chunk:
                         # Düzeltme maliyeti

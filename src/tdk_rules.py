@@ -53,9 +53,13 @@ ACRONYM_SUFFIX_CORRECTIONS = {
     "THY'ya": "THY'ye"
 }
 
+TECH_ACRONYMS = {
+    "pc", "gpu", "cpu", "ram", "ssd", "usb", "dc", "tr", "ai", "llm"
+}
+
 KNOWN_ACRONYMS = {
     "tdk", "sgk", "ssk", "meb", "tbmm", "tübitak", "rtük", "yök", "thy", "abd", "ab", "chp", "akp", "mhp"
-}
+} | TECH_ACRONYMS
 
 # ==============================================================================
 # 2. ÜNSÜZ BENZEŞMESİ (FISTIKÇI ŞAHAP) VE EK SERTLEŞMESİ
@@ -197,30 +201,48 @@ def fix_proper_nouns_and_acronyms(text: str) -> str:
         if handled:
             continue
 
-        # Büyük harfli kısaltmaya ek gelmişse (Örn: MEBe -> MEB'e, TBMMde -> TBMM'de)
-        if clean_word.isupper() and len(clean_word) >= 2:
-            # Zaten kesmeli mi?
-            if "'" in clean_word:
-                result_words.append(word)
-                continue
-            # Bilinen kısaltma kökü var mı?
-            for acr in KNOWN_ACRONYMS:
-                if lower_clean.startswith(acr) and len(lower_clean) > len(acr):
-                    suffix = lower_clean[len(acr):]
-                    if suffix in all_suffixes_flat:
-                        stem = clean_word[:len(acr)]
-                        # Son harfe göre ek düzeltmesi (özellikle K harfi -> 'e')
-                        if stem.endswith("K") and suffix in {"a", "ya", "da"}:
-                            suffix = "ye" if suffix in {"a", "ya"} else "de"
-                        result_words.append(f"{stem}'{suffix}{punc_suffix}")
-                        handled = True
-                        break
-            if handled:
-                continue
+        # 1.B: Tek başına teknik kısaltma (örn: pc -> PC, gpu -> GPU, tr -> TR)
+        if lower_clean in TECH_ACRONYMS:
+            result_words.append(lower_clean.upper() + punc_suffix)
+            continue
+
+        # 1.C: Büyük ya da küçük harfle yazılmış kısaltmaya ek gelmişse (örn: pcden -> PC'den, MEBe -> MEB'e, trde -> TR'de)
+        if "'" in clean_word:
+            result_words.append(word)
+            continue
+
+        acr_handled = False
+        for acr in KNOWN_ACRONYMS:
+            if lower_clean.startswith(acr) and len(lower_clean) > len(acr):
+                # 'ab' ve 'ai' gibi 2 harfli kısaltmalar küçük yazıldığında ('abi', 'ait', 'aile') özel kısaltma sayılmaz
+                if acr in {"ab", "ai"} and not clean_word[:2].isupper():
+                    continue
+                suffix = lower_clean[len(acr):]
+                # 2 harfli kısaltmalarda tek harfli ünlü eki ('abi' -> 'ab'+'i') ayrılmaz
+                if len(acr) <= 2 and len(suffix) < 2:
+                    continue
+                if suffix in all_suffixes_flat:
+                    stem = acr.upper()
+                    # Son harfe ve ünlü uyumuna göre ek düzeltmesi
+                    if stem.endswith("K") and suffix in {"a", "ya", "da"}:
+                        suffix = "ye" if suffix in {"a", "ya"} else "de"
+                    elif stem in {"PC", "DC", "TR", "AI", "CPU", "GPU"} and suffix in {"da", "dan"}:
+                        suffix = "de" if suffix == "da" else "den"
+                    result_words.append(f"{stem}'{suffix}{punc_suffix}")
+                    acr_handled = True
+                    break
+        if acr_handled:
+            continue
 
         # 2. Özel isim tespiti (Örn: ankarada, ahmete, mustafanın)
+        # Cins isimlerle eş sesli olan özel isimler ('can', 'deniz', 'yağmur', 'ordu', 'ağrı' vb.) küçük harfle yazılmışsa cins isimdir
+        common_noun_homonyms = {
+            "can", "deniz", "yağmur", "gizem", "ağrı", "ordu", "aydın", "muş", "van", "batman"
+        }
         for stem in ALL_PROPER_STEMS:
             if lower_clean.startswith(stem) and len(lower_clean) > len(stem):
+                if stem in common_noun_homonyms and not (clean_word and clean_word[0].isupper()):
+                    continue
                 suffix = lower_clean[len(stem):]
                 if suffix in all_suffixes_flat:
                     # Doğru büyük harfli kök
@@ -257,10 +279,19 @@ def fix_consonant_and_colloquial(text: str) -> str:
             result_words.append(replacement + punc_suffix)
             continue
 
-        # Fıstıkçı Şahap: sert ünsüz (p, ç, t, k, f, h, ş, s) ardından gelen c/d seslerini sertleştir
+        # Fıstıkçı Şahap: yalnızca kelime sonundaki ek sınırlarında (-da/-de, -dan/-den, -dı/-di, -cı/-ci) uygula
+        # ('takdir', 'tasdik', 'mahcup', 'mescit', 'akdeniz' gibi kelime köklerini bozmaz)
         consonant_fixed = lower_clean
-        consonant_fixed = re.sub(r'([pçtkfhşs])c([ıiauüöoe])', r'\1ç\2', consonant_fixed)
-        consonant_fixed = re.sub(r'([pçtkfhşs])d([ıiauüöoe])', r'\1t\2', consonant_fixed)
+        consonant_fixed = re.sub(
+            r'^([a-zçğıöşü]{2,}[pçtkfhşs])c(ı|i|u|ü|ılık|ilik|uluk|ülük)$',
+            r'\1ç\2',
+            consonant_fixed,
+        )
+        consonant_fixed = re.sub(
+            r'^([a-zçğıöşü]{2,}[pçtkfhşs])d(a|e|an|en|ı|i|u|ü|ım|im|um|üm|ın|in|un|ün|ık|ik|uk|ük)$',
+            r'\1t\2',
+            consonant_fixed,
+        )
         if consonant_fixed != lower_clean:
             if clean_word and clean_word[0].isupper():
                 consonant_fixed = turkish_capitalize(consonant_fixed)

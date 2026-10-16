@@ -143,3 +143,23 @@ def test_tdk_time_and_number_grammar():
     assert "2026'da" in apply_tdk_rules("2026 de")
     assert "1923'te" in apply_tdk_rules("1923 de")
 
+
+def test_homonyms_and_root_loanwords_not_corrupted():
+    """Cins isim eş seslileri (abi, canı, denize, yağmurda, orduda) ve alıntı kökler (takdir, mahcup) bozulmamalı."""
+    assert fix_sentence("abi naber") == "Abi naber."
+    assert fix_sentence("canı sıkıldı") == "Canı sıkıldı."
+    assert fix_sentence("denize gittik") == "Denize gittik."
+    assert fix_sentence("yağmurda ıslandık") == "Yağmurda ıslandık."
+    assert fix_sentence("orduda görev yaptı") == "Orduda görev yaptı."
+    assert fix_sentence("takdir ettim mahcup oldum") == "Takdir ettim mahcup oldum."
+    assert fix_sentence("bugün işi bitirdim") == "Bugün işi bitirdim."
+
+
+def test_devrik_and_colloquial_complex_sentences():
+    """Devrik cümleler, -icek/-yom daralmaları, kısaltma ekleri ve bitişik 'banasun' ayrımı."""
+    assert fix_sentence("Oturuyorum yemek yedim siz") == "Oturuyorum yemek yedim, siz?"
+    assert fix_sentence("deniyom bakalim pcden") == "Deniyorum bakalım PC'den."
+    assert fix_sentence(
+        "yaptığı projeyi bastan sona gözden geçir ve düzelticekleri düzelt geliştir ve banasun"
+    ) == "Yaptığı projeyi baştan sona gözden geçir ve düzeltecekleri düzelt geliştir ve bana sun."
+

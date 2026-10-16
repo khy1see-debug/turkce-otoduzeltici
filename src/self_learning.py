@@ -66,6 +66,13 @@ class SelfLearningManager:
                         learned_word TEXT
                     )
                 ''')
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS phrase_learning (
+                        phrase TEXT PRIMARY KEY,
+                        count INTEGER DEFAULT 1,
+                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
                 conn.commit()
             finally:
                 conn.close()
@@ -100,6 +107,74 @@ class SelfLearningManager:
                     word: ts for word, ts in self._pending_corrections.items()
                     if ts > cutoff
                 }
+                # 3 saniyeyi geçmiş tüm bekleyen düzeltmeleri otomatik kabul et ve öğren
+                self._process_pending_acceptances(conn)
+            finally:
+                conn.close()
+
+    def _process_pending_acceptances(self, conn: sqlite3.Connection):
+        """3 saniyeyi geçen ve geri alınmayan (Ctrl+Z basılmayan) düzeltmeleri kabul edildi sayıp öğrenir."""
+        import re
+        from src.turkish_case import turkish_lower
+        cursor = conn.execute('''
+            SELECT id, original_text, corrected_text FROM correction_events
+            WHERE user_accepted IS NULL AND timestamp < datetime('now', '-3 seconds')
+        ''')
+        rows = cursor.fetchall()
+        for row_id, orig, corr in rows:
+            conn.execute('UPDATE correction_events SET user_accepted = 1 WHERE id = ?', (row_id,))
+            raw_tokens = re.findall(r"[a-zA-ZçÇğĞıİöÖşŞüÜ]+(?:['’][a-zA-ZçÇğĞıİöÖşŞüÜ]+)?", corr)
+            clean_words = []
+            for t in raw_tokens:
+                stem = re.split(r"['’]", t)[0]
+                low = turkish_lower(stem)
+                if len(low) >= 3 and low not in {"den", "dan", "ten", "tan", "nin", "nın", "şuan"}:
+                    clean_words.append(low)
+                    conn.execute('''
+                        INSERT OR REPLACE INTO word_learning (word, acceptance_count, rejection_count, last_updated)
+                        VALUES (
+                            ?,
+                            COALESCE((SELECT acceptance_count FROM word_learning WHERE word = ?), 0) + 1,
+                            COALESCE((SELECT rejection_count FROM word_learning WHERE word = ?), 0),
+                            CURRENT_TIMESTAMP
+                        )
+                    ''', (low, low, low))
+                    self._check_and_promote_word(low, conn)
+
+            # 2-gram ve 3-gram tamlama/cümle öbeği öğrenimi
+            for n in (2, 3):
+                for i in range(len(clean_words) - n + 1):
+                    phrase = " ".join(clean_words[i:i+n])
+                    conn.execute('''
+                        INSERT OR REPLACE INTO phrase_learning (phrase, count, last_updated)
+                        VALUES (
+                            ?,
+                            COALESCE((SELECT count FROM phrase_learning WHERE phrase = ?), 0) + 1,
+                            CURRENT_TIMESTAMP
+                        )
+                    ''', (phrase, phrase))
+        if rows:
+            conn.commit()
+
+    def process_pending_now(self):
+        """Dışarıdan çağrılabilen senkron kabul ve öğrenme döngüsü."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                self._process_pending_acceptances(conn)
+            finally:
+                conn.close()
+
+    def get_frequent_phrases(self, min_count: int = 2) -> list:
+        """Kullanıcının sıkça kabul ettiği 2'li ve 3'lü tamlamaları döner."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                cursor = conn.execute(
+                    'SELECT phrase, count FROM phrase_learning WHERE count >= ? ORDER BY count DESC LIMIT 50',
+                    (min_count,)
+                )
+                return cursor.fetchall()
             finally:
                 conn.close()
 
@@ -144,11 +219,19 @@ class SelfLearningManager:
         Record that a user rejected a correction (undo/Ctrl+Z).
 
         Args:
-            word: The word that was rejected (undo'd)
+            word: The word or sentence that was rejected (undo'd)
         """
         with self._lock:
             conn = self._get_connection()
             try:
+                cursor = conn.execute('''
+                    SELECT id, original_text FROM correction_events
+                    WHERE corrected_text = ? AND user_accepted IS NULL
+                    ORDER BY timestamp DESC LIMIT 1
+                ''', (word,))
+                ev_row = cursor.fetchone()
+                orig_text = ev_row[1] if ev_row else ""
+
                 # Update the most recent correction event for this word
                 conn.execute('''
                     UPDATE correction_events
@@ -157,16 +240,46 @@ class SelfLearningManager:
                     ORDER BY timestamp DESC LIMIT 1
                 ''', (word,))
 
-                # Update learning counters
-                conn.execute('''
-                    INSERT OR REPLACE INTO word_learning (word, acceptance_count, rejection_count, last_updated)
-                    VALUES (
-                        ?,
-                        COALESCE((SELECT acceptance_count FROM word_learning WHERE word = ?), 0),
-                        COALESCE((SELECT rejection_count FROM word_learning WHERE word = ?), 0) + 1,
-                        CURRENT_TIMESTAMP
-                    )
-                ''', (word, word, word))
+                corr_tokens = {
+                    turkish_lower(re.split(r"['’]", t)[0])
+                    for t in re.findall(r"[a-zA-ZçÇğĞıİöÖşŞüÜ]+(?:['’][a-zA-ZçÇğĞıİöÖşŞüÜ]+)?", word)
+                }
+                orig_tokens = {
+                    turkish_lower(re.split(r"['’]", t)[0])
+                    for t in re.findall(r"[a-zA-ZçÇğĞıİöÖşŞüÜ]+(?:['’][a-zA-ZçÇğĞıİöÖşŞüÜ]+)?", orig_text)
+                } if orig_text else set()
+
+                rejected_targets = (corr_tokens - orig_tokens) if (orig_tokens and corr_tokens != orig_tokens) else corr_tokens
+                if not rejected_targets or " " not in word.strip():
+                    rejected_targets = set(rejected_targets) | {word.strip()}
+
+                for target_w in rejected_targets:
+                    if not target_w:
+                        continue
+                    conn.execute('''
+                        INSERT OR REPLACE INTO word_learning (word, acceptance_count, rejection_count, learned, last_updated)
+                        VALUES (
+                            ?,
+                            COALESCE((SELECT acceptance_count FROM word_learning WHERE word = ?), 0),
+                            COALESCE((SELECT rejection_count FROM word_learning WHERE word = ?), 0) + 1,
+                            0,
+                            CURRENT_TIMESTAMP
+                        )
+                    ''', (target_w, target_w, target_w))
+
+                # Kullanıcının orijinal yazdığı özel kelime düzeltilip Ctrl+Z ile geri alındıysa orijinal kelimeyi ödüllendir
+                for custom_orig in (orig_tokens - corr_tokens):
+                    if len(custom_orig) >= 3:
+                        conn.execute('''
+                            INSERT OR REPLACE INTO word_learning (word, acceptance_count, rejection_count, last_updated)
+                            VALUES (
+                                ?,
+                                COALESCE((SELECT acceptance_count FROM word_learning WHERE word = ?), 0) + 1,
+                                COALESCE((SELECT rejection_count FROM word_learning WHERE word = ?), 0),
+                                CURRENT_TIMESTAMP
+                            )
+                        ''', (custom_orig, custom_orig, custom_orig))
+                        self._check_and_promote_word(custom_orig, conn)
 
                 conn.commit()
 
@@ -191,8 +304,8 @@ class SelfLearningManager:
 
         if row:
             acceptance, rejection = row
-            # Promote if: acceptance >= 3 and acceptance >= 2 * rejection
-            if acceptance >= 3 and acceptance >= 2 * rejection:
+            # Promote if: acceptance >= 2 and acceptance >= 2 * rejection
+            if acceptance >= 2 and acceptance >= 2 * rejection:
                 # Mark as learned
                 conn.execute('''
                     UPDATE word_learning
@@ -201,7 +314,21 @@ class SelfLearningManager:
                 ''', (word,))
 
                 logger.info(f"Word '{word}' promoted to personal dictionary via self-learning")
-                # Note: Actual addition to personal dictionary happens in dictionary.py
+                try:
+                    from src.dictionary import ALL_TURKISH_WORDS, BLOCKED_SHORT_CHUNKS, add_personal_word
+                    from src.slang import ALL_EXPANSIONS
+                    low_w = turkish_lower(word.strip())
+                    # Yalnızca ana sözlükte olmayan, TDK yazım hatası olmayan gerçek özel kelimeleri kisisel_sozluk.txt'e yaz
+                    if (
+                        len(low_w) >= 3
+                        and low_w not in ALL_TURKISH_WORDS
+                        and low_w not in ALL_EXPANSIONS
+                        and low_w not in BLOCKED_SHORT_CHUNKS
+                        and low_w not in {"den", "dan", "ten", "tan", "nin", "nın", "şuan"}
+                    ):
+                        add_personal_word(low_w)
+                except Exception:
+                    pass
 
     def get_learned_words(self) -> list:
         """Get list of words learned through self-learning."""

@@ -19,8 +19,8 @@ DEFAULTS = {
     "gemini_api_key": "",
     "gemini_model": "gemini-3.5-flash-lite",
     "nvidia_api_key": "",
-    "ai_model": "stepfun-ai/step-5-preview",
-    "use_ai_in_tray": True,
+    "ai_model": "meta/llama-3.2-11b-vision-instruct",
+    "use_ai_in_tray": False,
 }
 
 def get_config_dir():

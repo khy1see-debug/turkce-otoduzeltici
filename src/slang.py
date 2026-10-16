@@ -281,6 +281,21 @@ CHAT_SLANG_MAP = {
     "özledim": "özledim",
     "ozledim": "özledim",
 
+    # --- Kullanıcı Günlük & Sohbet Kalıpları ---
+    "vesallam": "vesselam",
+    "vessellam": "vesselam",
+    "ries": "reis",
+    "övelimmi": "övelim mi",
+    "ovelimmi": "övelim mi",
+    "anlamıyyer": "anlamıyor",
+    "anlamiyyer": "anlamıyor",
+    "çıldıryporum": "çıldırıyorum",
+    "cildiryporum": "çıldırıyorum",
+    "hayırlıolsunikkan": "hayırlı olsun ikkan",
+    "hayirliolsunikkan": "hayırlı olsun ikkan",
+    "patlatıcağz": "patlatacağız",
+    "patlaticagz": "patlatacağız",
+
     # --- Zaman & Bağlaç Kısaltmaları ---
     "zmn": "zaman",
     "nezaman": "ne zaman",
@@ -333,18 +348,117 @@ def normalize_elongation(word: str) -> str:
     return single_reduced
 
 
+def expand_colloquial_verb(token: str) -> Optional[str]:
+    """
+    Günlük konuşma ve mesajlaşma dilindeki kestirme fiil eklerini
+    standart Türkçe fiil çekimlerine dönüştürür.
+    Örnekler:
+      deniyom / denıyorm -> deniyorum
+      yapıyorsn -> yapıyorsun
+      deniyon -> deniyorsun
+      yapıyo -> yapıyor
+      yapcam -> yapacağım
+      gelcem -> geleceğim
+    """
+    clean_w = turkish_lower(token)
+    if is_valid_word(clean_w):
+        return None
+
+    # -yorsn -> -yorsun (örn: yapıyorsn, geliyorsn)
+    m = re.match(r"^([a-zçğıöşü]{2,})yorsn$", clean_w)
+    if m:
+        cand = deasciify_word(m.group(1) + "yorsun")
+        if is_valid_word(cand):
+            return cand
+
+    # -yorm / -yom / -yım -> -yorum (örn: deniyom, denıyorm, bakıyom, gidiyom)
+    m = re.match(r"^([a-zçğıöşü]{2,})(?:yorm|yom|yım)$", clean_w)
+    if m:
+        base = deasciify_word(m.group(1) + "yorum")
+        for cand in [base, base.replace('ı', 'i'), base.replace('i', 'ı')]:
+            if is_valid_word(cand):
+                return cand
+
+    # -yon -> -yorsun (örn: deniyon, bakıyon, geliyon)
+    m = re.match(r"^([a-zçğıöşü]{2,})yon$", clean_w)
+    if m:
+        cand = deasciify_word(m.group(1) + "yorsun")
+        if is_valid_word(cand):
+            return cand
+
+    # -yo -> -yor (örn: geliyo, gidiyo, bakıyo)
+    m = re.match(r"^([a-zçğıöşü]{2,})yo$", clean_w)
+    if m:
+        cand = deasciify_word(m.group(1) + "yor")
+        if is_valid_word(cand):
+            return cand
+
+    # -yoz -> -yoruz (örn: geliyoz, gidiyoz)
+    m = re.match(r"^([a-zçğıöşü]{2,})yoz$", clean_w)
+    if m:
+        cand = deasciify_word(m.group(1) + "yoruz")
+        if is_valid_word(cand):
+            return cand
+
+    # -yonuz -> -yorsunuz (örn: geliyonuz, gidiyonuz)
+    m = re.match(r"^([a-zçğıöşü]{2,})yonuz$", clean_w)
+    if m:
+        cand = deasciify_word(m.group(1) + "yorsunuz")
+        if is_valid_word(cand):
+            return cand
+
+    # -cam / -cem -> -acağım / -eceğim (örn: yapcam -> yapacağım, gelcem -> geleceğim)
+    m = re.match(r"^([a-zçğıöşü]{2,})(cam|cem)$", clean_w)
+    if m:
+        stem, suffix = m.group(1), m.group(2)
+        cand = deasciify_word(stem + ("acağım" if suffix == "cam" else "eceğim"))
+        if is_valid_word(cand):
+            return cand
+
+    # -cak / -cek -> -acak / -ecek (örn: yapcak -> yapacak, gelcek -> gelecek)
+    m = re.match(r"^([a-zçğıöşü]{2,})(cak|cek)$", clean_w)
+    if m:
+        stem, suffix = m.group(1), m.group(2)
+        cand = deasciify_word(stem + ("acak" if suffix == "cak" else "ecek"))
+        if is_valid_word(cand):
+            return cand
+
+    # -icek / -ıcak / -ücek / -ucak + ekler (örn: düzelticekleri -> düzeltecekleri, göndericem -> göndereceğim)
+    for narrow, wide in [
+        ("icem", "eceğim"), ("ıcam", "acağım"), ("ucam", "acağım"), ("ücem", "eceğim"),
+        ("icez", "eceğiz"), ("ıcaz", "acağız"), ("ucaz", "acağız"), ("ücez", "eceğiz"),
+        ("icek", "ecek"), ("ıcak", "acak"), ("ucak", "acak"), ("ücek", "ecek"),
+        ("iceğ", "eceğ"), ("ıcağ", "acağ"), ("ucağ", "acağ"), ("üceğ", "eceğ"),
+    ]:
+        if narrow in clean_w:
+            cand = deasciify_word(clean_w.replace(narrow, wide, 1))
+            if is_valid_word(cand):
+                return cand
+
+    return None
+
+
 def expand_slang(token: str) -> Optional[str]:
     """Kısaltma, TDK yaygın hatası veya chat argo kelimesini tam Türkçe karşılığına açar."""
     w = turkish_lower(token)
     if w in ALL_EXPANSIONS:
         return ALL_EXPANSIONS[w]
 
+    # Günlük fiil çekim normalizasyonu
+    verb_cand = expand_colloquial_verb(w)
+    if verb_cand:
+        return verb_cand
+
     # Uzatma kontrolü (geliyoruuuum vb.)
     normalized = normalize_elongation(w)
     if normalized != w:
         if normalized in ALL_EXPANSIONS:
             return ALL_EXPANSIONS[normalized]
+        verb_norm = expand_colloquial_verb(normalized)
+        if verb_norm:
+            return verb_norm
         if is_valid_word(normalized):
             return normalized
 
     return None
+

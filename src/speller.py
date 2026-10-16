@@ -27,6 +27,8 @@ def correct_word(word: str, max_distance: int = 1) -> str:
     Hızlı ve optimize: Harf yer değişimi, hece tekrarı ve 1-adım mesafeyi anında çözer.
     """
     word_clean = turkish_lower(word)
+    if len(word_clean) > 24:
+        return word_clean
     
     # 1. Kelime zaten geçerliyse doğrudan dön
     deasc = deasciify_word(word_clean)
@@ -44,28 +46,27 @@ def correct_word(word: str, max_distance: int = 1) -> str:
         if is_valid_word(syllable_dedup):
             return syllable_dedup
 
-    # 1.B: Harf yer değişimi (Transposition) kontrolü: kanak -> kanka
-    splits = [(word_clean[:i], word_clean[i:]) for i in range(len(word_clean) + 1)]
-    transposes = [L + R[1] + R[0] + R[2:] for L, R in splits if len(R) > 1]
-    trans_valid = [deasciify_word(w) for w in transposes if is_valid_word(deasciify_word(w)) or is_valid_word(w)]
-    if trans_valid:
-        return max(trans_valid, key=get_word_prob)
-
-    # 1.C: Tekrar eden/fazla harf silme: gdidiyor -> gidiyor
-    deletes = [L + R[1:] for L, R in splits if R]
-    del_valid = [deasciify_word(w) for w in deletes if is_valid_word(deasciify_word(w)) or is_valid_word(w)]
-    if del_valid:
-        return max(del_valid, key=get_word_prob)
-
-    # 1.D: Diğer 1-mesafe adayları (deasciifier ile birlikte)
+    # 1.B: Tüm 1-adım düzenleme adayları (O(1) sözlük kontrolü + hızlı deasciify)
     cands1 = edits1(word_clean)
-    valid_cands1 = set()
-    for c in cands1:
-        d = deasciify_word(c)
+    valid_cands1 = {c for c in cands1 if is_valid_word(c)}
+
+    splits = [(word_clean[:i], word_clean[i:]) for i in range(len(word_clean) + 1)]
+    fast_edits = (
+        [L + R[1:] for L, R in splits if R]
+        + [L + R[1] + R[0] + R[2:] for L, R in splits if len(R) > 1]
+    )
+    for c in fast_edits:
+        d = deasciify_word(c, max_indices=5)
         if is_valid_word(d):
             valid_cands1.add(d)
-        elif is_valid_word(c):
-            valid_cands1.add(c)
+
+    if not valid_cands1:
+        vowel_inserts = [L + v + R for L, R in splits for v in "aeıioöuü"]
+        for c in vowel_inserts:
+            d = deasciify_word(c, max_indices=5)
+            if is_valid_word(d):
+                valid_cands1.add(d)
+
     if valid_cands1:
         return max(valid_cands1, key=get_word_prob)
 
@@ -74,8 +75,7 @@ def correct_word(word: str, max_distance: int = 1) -> str:
         # 2 harf mesafesi
         for e1 in edits1(word_clean):
             for e2 in edits1(e1):
-                d = deasciify_word(e2)
-                if is_valid_word(d):
-                    return d
+                if is_valid_word(e2):
+                    return e2
 
     return word_clean

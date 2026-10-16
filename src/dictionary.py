@@ -45,7 +45,7 @@ BLOCKED_SHORT_CHUNKS = {
     "gd", "gt", "şl", "®", "ti", "2a", "│", "♦", "aj", "md", "sr", "fb", "tı", "mt", "lü", "ov", "ic", "tu", "tj",
     "h1", "g3", "g4", "dü", "zi", "do", "iğ", "to", "wp", "r2", "hz",
     "sn", "dk", "km", "kg", "tl", "cm", "mm", "vs", "vb",
-    "ticarici", "disarici", "dışarıcı",
+    "ticarici", "disarici", "dışarıcı", "yapıyors", "nıyor", "deniyo",
     "b", "c", "ç", "d", "e", "f", "g", "ğ", "h", "ı", "i", "j", "k", "l", "m", "n", "p", "r", "s", "ş", "t", "u", "ü", "v", "y", "z"
 }
 
@@ -68,11 +68,15 @@ CONFIG_DIR = os.environ.get(
 CONFIG_PERSONAL_DICT_PATH = os.path.join(
     CONFIG_DIR, "turkce-otoduzeltici", "kisisel_sozluk.txt"
 )
+APPDATA_PERSONAL_DICT_PATH = os.path.join(
+    os.environ.get("APPDATA", ""), "turkce-otoduzeltici", "kisisel_sozluk.txt"
+) if os.environ.get("APPDATA") else ""
 LEGACY_PERSONAL_DICT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "data", "kisisel_sozluk.txt"
 )
 PERSONAL_DICT_PATH = CONFIG_PERSONAL_DICT_PATH
 PERSONAL_WORDS: Set[str] = set()
+LEARNED_WORDS: Set[str] = set()
 _PERSONAL_DICT_SIGNATURE = None
 
 ALL_TURKISH_WORDS.add("o")
@@ -109,6 +113,7 @@ def is_valid_word(word: str) -> bool:
     return (
         w in ALL_TURKISH_WORDS
         or w in PERSONAL_WORDS
+        or w in LEARNED_WORDS
         or w in CRITICAL_GRAMMAR_WORDS
         or w in HIGH_PRIORITY_COLLOQUIAL
     )
@@ -133,6 +138,10 @@ def get_word_prob(word: str) -> float:
     except Exception:
         freq = 0.0
 
+    if w in LEARNED_WORDS:
+        boosted = max(freq * 2.0, 0.005)
+        return math.log(boosted) + (len(w) * 0.4)
+
     if freq > 0:
         return math.log(freq) + (len(w) * 0.4)
     
@@ -145,13 +154,15 @@ def get_word_prob(word: str) -> float:
 def _resolved_personal_dict_path() -> str:
     if os.path.isfile(CONFIG_PERSONAL_DICT_PATH):
         return CONFIG_PERSONAL_DICT_PATH
+    if APPDATA_PERSONAL_DICT_PATH and os.path.isfile(APPDATA_PERSONAL_DICT_PATH):
+        return APPDATA_PERSONAL_DICT_PATH
     if os.path.isfile(LEGACY_PERSONAL_DICT_PATH):
         return LEGACY_PERSONAL_DICT_PATH
     return CONFIG_PERSONAL_DICT_PATH
 
 
 def refresh_personal_dictionary(force: bool = False) -> bool:
-    """Reload user words after file changes, so a running service sees updates."""
+    """Reload user words after file changes and load learned words from self_learning.db."""
     global PERSONAL_DICT_PATH, _PERSONAL_DICT_SIGNATURE
 
     path = _resolved_personal_dict_path()
@@ -171,9 +182,30 @@ def refresh_personal_dictionary(force: bool = False) -> bool:
                 turkish_lower(line.strip())
                 for line in dictionary_file
                 if line.strip() and not line.lstrip().startswith("#")
-            }
+            } - BLOCKED_SHORT_CHUNKS
     except FileNotFoundError:
         pass
+
+    # self_learning.db içerisindeki 'learned = 1' kelimeleri LEARNED_WORDS kümesine yükle (testler hariç)
+    if "PYTEST_CURRENT_TEST" not in os.environ:
+        try:
+            import sqlite3
+            appdata = os.environ.get("APPDATA")
+            db_path = os.path.join(appdata, "turkce-otoduzeltici", "self_learning.db") if appdata else None
+            if db_path and os.path.isfile(db_path):
+                conn = sqlite3.connect(db_path, timeout=1.0)
+                cursor = conn.cursor()
+                cursor.execute("SELECT word FROM word_learning WHERE learned = 1")
+                learned = {
+                    turkish_lower(row[0].strip())
+                    for row in cursor.fetchall()
+                    if row[0] and len(row[0].strip()) >= 3
+                } - BLOCKED_SHORT_CHUNKS - {"den", "dan", "ten", "tan", "nin", "nın", "şuan"}
+                LEARNED_WORDS.clear()
+                LEARNED_WORDS.update(learned)
+                conn.close()
+        except Exception:
+            pass
 
     changed = words != PERSONAL_WORDS
     PERSONAL_WORDS.clear()

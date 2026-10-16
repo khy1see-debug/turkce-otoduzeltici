@@ -144,6 +144,19 @@ class Win32GlobalHotkeyThread(threading.Thread):
                     user32.TranslateMessage(ctypes.byref(msg))
                     user32.DispatchMessageW(ctypes.byref(msg))
                 else:
+                    # Akıllı Ctrl+Z (Undo) geri alma tespiti: Kullanıcı düzeltmeyi geri alırsa öğrenme motoru ret kaydeder
+                    global _last_correction_time, _last_correction_corrected
+                    if _last_correction_time > 0 and (time.time() - _last_correction_time) < 4.0:
+                        ctrl_pressed = bool(user32.GetAsyncKeyState(0x11) & 0x8000)
+                        z_pressed = bool(user32.GetAsyncKeyState(0x5A) & 0x8000)
+                        if ctrl_pressed and z_pressed:
+                            rejected = _last_correction_corrected
+                            _last_correction_time = 0.0
+                            try:
+                                from src import self_learning
+                                threading.Thread(target=self_learning.record_rejection, args=(rejected,), daemon=True).start()
+                            except Exception:
+                                pass
                     time.sleep(0.015)
         finally:
             for hid in self.registered_ids:
@@ -192,21 +205,21 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
         try:
             import ctypes
             user32 = ctypes.windll.user32
-            # Parmaklar Alt/Ctrl/Q/W tuşlarından çekilene kadar bekle (maks 400ms)
-            for _ in range(10):
+            # Parmaklar Alt/Ctrl/Q/W tuşlarından çekilene kadar bekle (hızlı yoklama)
+            for _ in range(8):
                 alt_down = bool(user32.GetAsyncKeyState(0x12) & 0x8000)
                 q_down = bool(user32.GetAsyncKeyState(0x51) & 0x8000)
                 w_down = bool(user32.GetAsyncKeyState(0x57) & 0x8000)
                 if not alt_down and not q_down and not w_down:
                     break
-                time.sleep(0.035)
+                time.sleep(0.012)
             # Tuşları donanım düzeyinde serbest bırak
             user32.keybd_event(0x12, 0, 2, 0)  # Alt UP
             user32.keybd_event(0x51, 0, 2, 0)  # Q UP
             user32.keybd_event(0x57, 0, 2, 0)  # W UP
             user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
             user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
-            time.sleep(0.02)
+            time.sleep(0.01)
         except Exception:
             pass
 
@@ -223,8 +236,8 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
     # 1. Standart Ctrl+C kopyalama denemesi
     _send_win32_key_combination('c')
     captured = ""
-    for _ in range(10):
-        time.sleep(0.035)
+    for _ in range(7):
+        time.sleep(0.015)
         try:
             t = pyperclip.paste()
             if t != sentinel and t.strip():
@@ -240,17 +253,17 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
             user32 = ctypes.windll.user32
             # Shift + Home (imleçten satır başına kadar seç)
             user32.keybd_event(0x10, 0, 0, 0)  # Shift DOWN
-            time.sleep(0.015)
+            time.sleep(0.01)
             user32.keybd_event(0x24, 0, 1, 0)  # Home DOWN
-            time.sleep(0.02)
-            user32.keybd_event(0x24, 0, 3, 0)  # Home UP
             time.sleep(0.015)
+            user32.keybd_event(0x24, 0, 3, 0)  # Home UP
+            time.sleep(0.01)
             user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
-            time.sleep(0.03)
+            time.sleep(0.015)
 
             _send_win32_key_combination('c')
-            for _ in range(8):
-                time.sleep(0.035)
+            for _ in range(6):
+                time.sleep(0.015)
                 t = pyperclip.paste()
                 if t != sentinel and t.strip():
                     captured = t
@@ -281,27 +294,27 @@ def correct_selected_text():
         return
 
     try:
-        # Düzeltme Motoru (NVIDIA NIM AI veya Yerel Motor)
+        # 1. Önce yerel deterministik motoru çalıştır (~2ms: TDK, bitişik kelime, argo, devrik koruma)
         settings = settings_manager.load_settings()
-        used_ai = False
-        corrected_text = None
+        is_all_caps = selected_text.isupper() and len([c for c in selected_text if c.isalpha()]) > 2
+        local_corrected = fix_sentence(selected_text)
+        if is_all_caps:
+            from src.turkish_case import turkish_upper
+            local_corrected = turkish_upper(local_corrected)
 
-        if settings.get("use_ai_in_tray", True):
+        used_ai = False
+        corrected_text = local_corrected
+
+        # 2. Kullanıcı özellikle Tray'de AI aktif ettiyse yerel çıktıyı AI ile cilala
+        if settings.get("use_ai_in_tray", False):
             try:
                 from src.ai_engine import fix_with_ai
-                ai_res = fix_with_ai(selected_text)
+                ai_res = fix_with_ai(local_corrected)
                 if ai_res and ai_res.strip():
                     corrected_text = ai_res.strip()
                     used_ai = True
             except Exception:
-                corrected_text = None
-
-        if not corrected_text:
-            is_all_caps = selected_text.isupper() and len([c for c in selected_text if c.isalpha()]) > 2
-            corrected_text = fix_sentence(selected_text)
-            if is_all_caps:
-                from src.turkish_case import turkish_upper
-                corrected_text = turkish_upper(corrected_text)
+                corrected_text = local_corrected
 
         # Sonucu Yapıştır
         if corrected_text != selected_text:
@@ -328,7 +341,7 @@ def correct_selected_text():
                 f"{selected_text} ➜ {corrected_text}"
             )
 
-            time.sleep(0.4)
+            time.sleep(0.08)
             if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
                 try:
                     pyperclip.copy(original_clipboard)
@@ -403,7 +416,7 @@ def translate_selected_text():
             f"{selected_text} ➜ {translated}"
         )
 
-        time.sleep(0.4)
+        time.sleep(0.08)
         if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
             try:
                 pyperclip.copy(original_clipboard)

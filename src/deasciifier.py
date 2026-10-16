@@ -13,7 +13,7 @@ from src.turkish_case import turkish_lower, turkish_upper
 ASCII_TO_TURKISH = {
     'c': ['c', 'ç'],
     'g': ['g', 'ğ'],
-    'i': ['i', 'ı', 'î'],
+    'i': ['i', 'ı'],
     'o': ['o', 'ö'],
     's': ['s', 'ş'],
     'u': ['u', 'ü']
@@ -42,7 +42,7 @@ def asciify_text(text: str) -> str:
 
 
 @lru_cache(maxsize=100000)
-def deasciify_word(word: str) -> str:
+def deasciify_word(word: str, max_indices: int = 6) -> str:
     """
     ASCII karakterlerle yazılmış tek bir kelimeyi (örn: 'ogrencilerin' -> 'öğrencilerin', 'goz' -> 'göz')
     en yüksek olasılıklı Türkçe haline çevirir.
@@ -58,8 +58,8 @@ def deasciify_word(word: str) -> str:
 
     # Değiştirilebilir karakter indeksleri
     indices = [idx for idx, ch in enumerate(word_lower) if ch in ASCII_TO_TURKISH]
-    if not indices or len(indices) > 5:
-        # 5'ten fazla şüpheli harf genelde bitişik bölünmemiş tümcedir
+    if not indices or len(indices) > max_indices:
+        # Çok fazla şüpheli harf genelde bitişik bölünmemiş tümcedir
         return word_lower
 
     current_pool = [list(word_lower)]

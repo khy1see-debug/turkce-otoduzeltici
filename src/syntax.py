@@ -42,28 +42,8 @@ def is_finite_verb(word: str) -> bool:
 
 def fix_word_order(tokens: List[str]) -> List[str]:
     """
-    Eğer yüklem/fiil cümlenin en başında kalmışsa ve cümle açık bir düz devrik cümle ise
-    fiili cümlenin sonuna taşır.
-    Soru cümlelerinde, emir kiplerinde veya 2 kelimelik ifadelerde dokunmaz.
+    Kullanıcının yazdığı kelime sırasını korur.
+    Türkçede devrik cümle, sıralı cümleler ve konuşma dili doğal anlatım biçimleridir;
+    kelimeleri zorla sona taşımak anlamı bozar.
     """
-    if len(tokens) <= 2:
-        return tokens
-
-    # Soru cümlelerinde devriklik düzeltilmez (örn: "Gördün mü onu dün?")
-    lower_tokens = [turkish_lower(t.strip(",.?!:;\"'")) for t in tokens]
-    if any(t in {"mi", "mı", "mu", "mü", "misin", "mısın", "musun", "müsün", "neden", "niye", "nasıl", "kim", "nerede"} for t in lower_tokens):
-        return tokens
-
-    # Eğer son kelime zaten fiil ise dokunma
-    last_w = lower_tokens[-1]
-    if is_finite_verb(last_w):
-        return tokens
-
-    # Cümlenin ilk kelimesi çekimli bir fiil mi? (Örn: "Gördüm seni dün sokakta" -> "seni dün sokakta gördüm")
-    if is_finite_verb(lower_tokens[0]):
-        verb = tokens.pop(0)
-        # Fiil cümlenin sonuna taşınırken küçük harfe indirgenmeli (cümle başı büyüteç kuralı yeni ilk kelimeye uygulanacak)
-        tokens.append(turkish_lower(verb))
-        return tokens
-
     return tokens

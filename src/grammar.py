@@ -16,7 +16,7 @@ import time
 from typing import List, Dict, Any, Tuple
 from src.segmenter import segment_text
 from src.speller import correct_word
-from src.dictionary import refresh_personal_dictionary
+from src.dictionary import refresh_personal_dictionary, is_valid_word
 from src.deasciifier import deasciify_word
 from src.harmony import fix_question_particle, get_genitive_suffix
 from src.slang import expand_slang, normalize_elongation, TDK_COMMON_MISSPELLINGS
@@ -232,36 +232,52 @@ def analyze_sentence(raw_text: str) -> Dict[str, Any]:
                 punctuation_before[len(processed_words) - 2] = prefix
             continue
 
-        # 2. Segmenter veya tek kelime düzeltici
-        if len(clean_token) > 4:
-            segmented = segment_text(clean_token)
-            if len(segmented) > 1:
+        # 2. Kelime geçerlilik ve imla düzeltmesi
+        deasc = deasciify_word(clean_token)
+        if is_valid_word(deasc) or is_valid_word(clean_token):
+            final_w = deasc if is_valid_word(deasc) else clean_token
+            if final_w != clean_token:
                 changes.append({
                     "original": token_core,
-                    "corrected": " ".join(segmented),
-                    "rule": "Bitişik Kelime Ayrımı: Bitişik yazılmış sözcükler sözlük ve frekans tablosuyla ayrıldı.",
-                    "type": "segmentation"
-                })
-            elif segmented and segmented[0] != clean_token:
-                changes.append({
-                    "original": token_core,
-                    "corrected": segmented[0],
-                    "rule": "İmla Düzeltme: Harf hatası ve Türkçe karakterler düzeltildi.",
-                    "type": "spelling"
-                })
-            processed_words.extend(segmented)
-        else:
-            deasc = deasciify_word(clean_token)
-            corrected = correct_word(deasc)
-            if corrected != clean_token:
-                changes.append({
-                    "original": token_core,
-                    "corrected": corrected,
+                    "corrected": final_w,
                     "rule": "İmla & De-asciifier: Doğru Türkçe harfler tamamlandı.",
                     "type": "spelling"
                 })
-            processed_words.append(corrected)
-            segmented = [corrected]
+            processed_words.append(final_w)
+            segmented = [final_w]
+        else:
+            # 2.A: 1-Adım mesafede tekil imla düzeltmesi adayı
+            cand = correct_word(deasc)
+            if is_valid_word(cand) and cand != clean_token:
+                changes.append({
+                    "original": token_core,
+                    "corrected": cand,
+                    "rule": "İmla Düzeltme: Harf hatası ve Türkçe karakterler düzeltildi.",
+                    "type": "spelling"
+                })
+                processed_words.append(cand)
+                segmented = [cand]
+            elif len(clean_token) > 4:
+                # 2.B: Birden fazla bitişik yazılmış kelime kontrolü (Segmenter)
+                segmented = segment_text(clean_token)
+                if len(segmented) > 1:
+                    changes.append({
+                        "original": token_core,
+                        "corrected": " ".join(segmented),
+                        "rule": "Bitişik Kelime Ayrımı: Bitişik yazılmış sözcükler sözlük ve frekans tablosuyla ayrıldı.",
+                        "type": "segmentation"
+                    })
+                elif segmented and segmented[0] != clean_token:
+                    changes.append({
+                        "original": token_core,
+                        "corrected": segmented[0],
+                        "rule": "İmla Düzeltme: Harf hatası ve Türkçe karakterler düzeltildi.",
+                        "type": "spelling"
+                    })
+                processed_words.extend(segmented)
+            else:
+                processed_words.append(cand)
+                segmented = [cand]
 
         punctuation_before.extend([""] * len(segmented))
         punctuation_after.extend([""] * (len(segmented) - 1) + [suffix])
@@ -318,14 +334,6 @@ def analyze_sentence(raw_text: str) -> Dict[str, Any]:
     punctuation_after = final_after
     whitespace_before = final_whitespace
 
-    # İyelik ve Tamlayan (Genitive Case) İlişkisi:
-    has_possessive = any(turkish_lower(w) in POSSESSIVE_NOUNS for w in processed_words[1:])
-    if has_possessive and len(processed_words) > 1:
-        first = turkish_lower(processed_words[0])
-        if first not in {"bu", "şu", "o", "ben", "sen", "biz", "siz", "her", "bir", "ne", "nasıl"}:
-            suffix = get_genitive_suffix(processed_words[0])
-            processed_words[0] = processed_words[0] + suffix
-
     # Soru eki ünlü uyumu düzeltmesi
     for i in range(1, len(processed_words)):
         w = turkish_lower(processed_words[i])
@@ -360,13 +368,31 @@ def analyze_sentence(raw_text: str) -> Dict[str, Any]:
     if not (PROTECTED_TOKEN.fullmatch(first_word) or first_word.isupper()):
         processed_words[0] = turkish_capitalize(first_word)
 
-    # Soru tespiti
+    # Soru tespiti & Devrik cümle karşılıklı soru kontrolü
+    QUESTION_WORDS = {
+        "ne", "neden", "niye", "niçin", "nerede", "nereden", "nereye",
+        "kim", "kimi", "kime", "kimin", "nasıl", "hangi", "hangisi", "kaç", "kaça"
+    }
     is_question = False
     for word in processed_words:
         w_low = turkish_lower(word)
-        if w_low in QUESTION_PARTICLES or w_low in {"neden", "niçin", "nerede", "kim", "nasıl", "hangi", "kaç", "ne zaman", "kimin", "nereye"}:
+        if w_low in QUESTION_PARTICLES or w_low in QUESTION_WORDS:
             is_question = True
             break
+
+    # "yemek yedim siz", "ya sen", "peki siz" gibi karşılıklı devrik soru tespiti
+    from src.syntax import is_finite_verb
+    if len(processed_words) >= 2 and turkish_lower(processed_words[-1]) in {"siz", "sen"}:
+        prev_low = turkish_lower(processed_words[-2])
+        if prev_low in {"ya", "peki"} or any(is_finite_verb(w) for w in processed_words[:-1]):
+            is_question = True
+            if not punctuation_after[-2]:
+                punctuation_after[-2] = ","
+
+    # "ne ... ne ..." bağlacı kontrolü (Soru değildir)
+    words_lower = [turkish_lower(w) for w in processed_words]
+    if words_lower.count("ne") >= 2:
+        is_question = False
 
     # Bağlaçlardan önce virgül (CLAUSE_CONNECTORS)
     CLAUSE_CONNECTORS = {"ama", "fakat", "ancak", "lakin", "çünkü", "halbuki", "oysa", "oysaki"}
