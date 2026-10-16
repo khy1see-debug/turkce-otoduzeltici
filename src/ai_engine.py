@@ -551,40 +551,117 @@ def fix_with_ai(
     return None
 
 
+TR_STOPWORDS = {
+    "ben", "sen", "biz", "siz", "onlar", "bu", "su", "o", "bir", "ve", "ile", "icin",
+    "gibi", "kadar", "diye", "mi", "mu", "mu", "mi", "nasil", "neden", "nicin", "nerede",
+    "kim", "hangi", "kac", "cok", "daha", "en", "var", "yok", "ama", "fakat", "cunku",
+    "eger", "ki", "merhaba", "selam", "gunaydin", "iyi", "kotu", "guzel", "tamam",
+    "evet", "hayir", "degil", "sey", "her", "zaman", "boyle", "soyle", "oyle", "gel",
+    "git", "yap", "et", "ol", "bak", "gor", "al", "ver", "yine", "artik", "sonra", "once",
+    "yapiyorsun", "ediyorsun", "geliyorsun", "gidiyorsun", "yapiyor", "geliyor", "gidiyor",
+    "yapar", "eder", "gelir", "yaparsin", "edersin", "gelirsin", "yaptim", "ettim", "geldim",
+    "gittim", "oldu", "bitti", "tamamdir", "tesekkurler", "tesekkur", "ederim", "rica"
+}
+
+EN_STOPWORDS = {
+    "the", "be", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not",
+    "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from",
+    "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would",
+    "there", "their", "what", "so", "up", "out", "if", "about", "who", "get", "which",
+    "go", "me", "when", "make", "can", "like", "time", "no", "just", "him", "know",
+    "take", "people", "into", "year", "your", "good", "some", "could", "them", "see",
+    "other", "than", "then", "now", "look", "only", "come", "its", "over", "think",
+    "also", "back", "after", "use", "two", "how", "our", "work", "first", "well",
+    "way", "even", "new", "want", "because", "any", "these", "give", "day", "most",
+    "us", "cancel", "settings", "options", "file", "save", "edit", "view", "help",
+    "close", "open", "download", "install", "update", "search", "delete", "share",
+    "copy", "paste", "cut", "undo", "redo", "next", "prev", "previous", "submit",
+    "login", "logout", "sign", "password", "user", "email", "morning", "night", "hello",
+    "thanks", "thank", "please", "welcome", "select", "continue", "done", "finish"
+}
+
+
 def detect_source_language(text: str) -> str:
     """
-    Metnin Türkçe mi yoksa İngilizce mi olduğunu otomatik tespit eder.
-    'tr' veya 'en' döner.
+    Metnin Türkçe mi yoksa Yabancı Dil mi (İngilizce, Almanca, Fransızca vb.) olduğunu
+    otomatik ve yüksek doğrulukla tespit eder. 'tr' veya 'en' (yabancı dil) döner.
     """
+    if not text or not text.strip():
+        return "tr"
+
+    # 1. Özgün Türkçe karakterler (ç, ğ, ı, ö, ş, ü) varsa kesinlikle Türkçedir
     if any(c in "çğıöşüÇĞİÖŞÜ" for c in text):
         return "tr"
 
-    clean_words = set(re.findall(r'[a-zA-ZçğıöşüÇĞİÖŞÜ]+', text.lower()))
+    # 2. Latin harici alfabeler (Kiril, Arap, Çin, Japon, Kore, Yunan vb.) kesinlikle yabancı dildir
+    if re.search(r'[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0370-\u03FF]', text):
+        return "en"
+
+    clean_words = [w.lower() for w in re.findall(r'[a-zA-ZçğıöşüÇĞİÖŞÜ]+', text)]
     if not clean_words:
         return "tr"
 
-    tr_markers = {
-        "ne", "ve", "bir", "bu", "o", "su", "ben", "sen", "biz", "siz", "onlar",
-        "mi", "mu", "nasil", "neden", "nicin", "nerede", "kim", "hangi", "kac",
-        "cok", "daha", "en", "icin", "ile", "gibi", "kadar", "diye", "var", "yok",
-        "ama", "fakat", "cunku", "eger", "ki", "de", "da", "merhaba", "selam",
-        "gunaydin", "iyi", "kotu", "guzel", "yapiyorsun", "ediyorsun", "geliyorsun",
-        "gidiyorsun", "yapiyor", "geliyor", "gidiyor", "yapar", "eder", "gelir",
-        "yapiyorsunu", "yaparsin", "edersin", "gelirsin"
-    }
-    en_markers = {
-        "the", "is", "are", "am", "was", "were", "be", "been", "have", "has", "had",
-        "do", "does", "did", "will", "would", "can", "could", "and", "or", "but",
-        "if", "what", "which", "who", "how", "why", "where", "when", "this", "that",
-        "you", "your", "they", "their", "we", "our", "he", "his", "she", "her", "my"
-    }
+    # 3. Yüksek frekanslı durak kelime (stopword) eşleşmesi
+    tr_matches = sum(1 for w in clean_words if w in TR_STOPWORDS)
+    en_matches = sum(1 for w in clean_words if w in EN_STOPWORDS)
 
-    tr_score = len(clean_words.intersection(tr_markers))
-    en_score = len(clean_words.intersection(en_markers))
-
-    if en_score > tr_score:
+    if en_matches > tr_matches:
         return "en"
-    return "tr"
+    if tr_matches > en_matches:
+        return "tr"
+
+    # 4. Word frequency istatistiksel skorlama
+    try:
+        import wordfreq
+        tr_freq = sum(wordfreq.word_frequency(w, 'tr') for w in clean_words)
+        en_freq = sum(wordfreq.word_frequency(w, 'en') for w in clean_words)
+        de_freq = sum(wordfreq.word_frequency(w, 'de') for w in clean_words)
+        fr_freq = sum(wordfreq.word_frequency(w, 'fr') for w in clean_words)
+        es_freq = sum(wordfreq.word_frequency(w, 'es') for w in clean_words)
+        foreign_freq = max(en_freq, de_freq, fr_freq, es_freq)
+
+        if foreign_freq > tr_freq * 1.5:
+            return "en"
+        if tr_freq > foreign_freq * 1.5:
+            return "tr"
+        return "en" if foreign_freq >= tr_freq else "tr"
+    except Exception:
+        pass
+
+    return "en" if en_matches > 0 else "tr"
+
+
+def free_web_translate(text: str, target_lang: str = "tr", timeout: float = 3.5) -> Optional[str]:
+    """
+    Sıfır maliyetli genel web uç noktası üzerinden çift yönlü (Yabancı Dil ⇄ Türkçe) yedek çeviri.
+    API kotası bittiğinde veya ana yapay zeka zaman aşımına uğradığında kesintisiz çeviri sağlar.
+    """
+    if not text or not text.strip():
+        return text
+    try:
+        import urllib.parse
+        clean_text = text.strip()
+        url = (
+            f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&q="
+            + urllib.parse.quote(clean_text)
+        )
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            }
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                body = resp.read().decode("utf-8")
+                data = json.loads(body)
+                if data and isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                    translated = "".join(seg[0] for seg in data[0] if seg and seg[0])
+                    if translated and translated.strip():
+                        return translated.strip()
+    except Exception:
+        pass
+    return None
 
 
 def translate_with_ai(
@@ -596,7 +673,7 @@ def translate_with_ai(
     provider: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Yapay zeka (Google Gemini veya NVIDIA) kullanarak çift yönlü (TR ⇄ EN) akıllı çeviri yapar.
+    Yapay zeka (Google Gemini veya NVIDIA) kullanarak çift yönlü (Yabancı Dil ⇄ TR) akıllı çeviri yapar.
     target_lang: 'auto', 'tr' veya 'en'.
     """
     if not text or not text.strip():
@@ -614,7 +691,7 @@ def translate_with_ai(
         )
     else:
         sys_prompt = (
-            "Verilen metni doğal, akıcı ve profesyonel bir Türkçeye çevir.\n"
+            "Verilen yabancı metni (İngilizce, Almanca, Fransızca, İspanyolca vb.) doğal, akıcı ve profesyonel bir Türkçeye çevir.\n"
             "YALNIZCA Türkçe çeviriyi yaz, açıklama, tırnak veya not ekleme."
         )
 

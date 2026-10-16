@@ -203,10 +203,36 @@ def test_translate_with_ai_blocks_hallucination():
 
 
 def test_detect_source_language():
+    # Türkçe örnekler
     assert ai_engine.detect_source_language("ne yapıyorsun") == "tr"
-    assert ai_engine.detect_source_language("What are you doing?") == "en"
     assert ai_engine.detect_source_language("günaydın") == "tr"
+    assert ai_engine.detect_source_language("nasilsin iyi misin") == "tr"
+    assert ai_engine.detect_source_language("bugun hava cok guzel") == "tr"
+    assert ai_engine.detect_source_language("ben geliyorum") == "tr"
+    assert ai_engine.detect_source_language("sen de gel") == "tr"
+
+    # İngilizce ve Yabancı Dil örnekler
+    assert ai_engine.detect_source_language("What are you doing?") == "en"
     assert ai_engine.detect_source_language("Good morning my friend") == "en"
+    assert ai_engine.detect_source_language("Good morning") == "en"
+    assert ai_engine.detect_source_language("Cancel") == "en"
+    assert ai_engine.detect_source_language("Settings") == "en"
+    assert ai_engine.detect_source_language("Download application") == "en"
+    assert ai_engine.detect_source_language("Save changes") == "en"
+    assert ai_engine.detect_source_language("Bonjour tout le monde") == "en"
+    assert ai_engine.detect_source_language("Guten Morgen") == "en"
+    assert ai_engine.detect_source_language("Hola amigo") == "en"
+
+
+def test_free_web_translate_mocked():
+    fake_response = MagicMock()
+    fake_response.status = 200
+    fake_response.read.return_value = b'[[["Ayarlar ve bildirimler","Settings and notifications",null,null,1]],null,"en"]'
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value.__enter__.return_value = fake_response
+        res = ai_engine.free_web_translate("Settings and notifications", target_lang="tr")
+        assert res == "Ayarlar ve bildirimler"
 
 
 

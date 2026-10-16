@@ -388,12 +388,19 @@ def translate_selected_text():
         return
 
     try:
-        from src.ai_engine import translate_with_ai
-        translated = translate_with_ai(selected_text, target_lang="auto")
+        from src.ai_engine import translate_with_ai, free_web_translate, detect_source_language
+        src_lang = detect_source_language(selected_text)
+        target_lang = "en" if src_lang == "tr" else "tr"
+
+        translated = translate_with_ai(selected_text, target_lang=target_lang)
+        if not translated or not translated.strip():
+            # Yedek: Hızlı ve kesintisiz web çevirisi
+            translated = free_web_translate(selected_text, target_lang=target_lang)
+
         if not translated or not translated.strip():
             _notification_manager.show_notification(
                 "⚠️ Çeviri Başarısız",
-                "Yapay Zeka API yanıt vermedi veya metin güvenlik denetiminden geçemedi."
+                "Çeviri servisi yanıt vermedi veya metin güvenlik denetiminden geçemedi."
             )
             if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
                 try:
@@ -411,8 +418,9 @@ def translate_selected_text():
         if settings.get("sound_toggle", True):
             _notification_manager.play_sound("success")
 
+        direction_title = "🌍 Türkçe ➜ İngilizce" if target_lang == "en" else "🌍 Yabancı Dil ➜ Türkçe"
         _notification_manager.show_notification(
-            "🌍 Akıllı Çeviri (TR ⇄ EN)",
+            direction_title,
             f"{selected_text} ➜ {translated}"
         )
 
