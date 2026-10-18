@@ -1,6 +1,4 @@
 """Tests for Windows hotkey parsing, AltGr safety and modifier handling."""
-import sys
-import pytest
 from src.app_tray import _parse_hotkey_string, _release_and_mask_modifiers
 
 

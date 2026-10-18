@@ -3,8 +3,6 @@ Notifications module for turkce-otoduzeltici.
 Handles Windows notifications, tray messages, and sound feedback safely across all environments.
 """
 
-import sys
-
 try:
     import winsound
     SOUND_AVAILABLE = True

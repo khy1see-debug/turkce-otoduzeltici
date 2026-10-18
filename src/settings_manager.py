@@ -16,12 +16,31 @@ DEFAULTS = {
     "elongation_cleanup": True,
     "contextual_correction": True,
     "ai_provider": "auto",
+    "groq_api_key": "",
+    "groq_model": "openai/gpt-oss-120b",
     "gemini_api_key": "",
     "gemini_model": "gemini-3.5-flash-lite",
     "nvidia_api_key": "",
     "ai_model": "meta/llama-3.2-11b-vision-instruct",
-    "use_ai_in_tray": False,
+    "use_ai_in_tray": True,
     "floating_pill_enabled": True,
+    "target_translate_lang": "de",
+    "custom_translate_hotkey": "alt+t",
+    "network_policy": "local_only",
+}
+
+SUPPORTED_TRANSLATE_LANGS = {
+    "de": "🇩🇪 Almanca",
+    "en": "🇬🇧 İngilizce",
+    "ru": "🇷🇺 Rusça",
+    "fr": "🇫🇷 Fransızca",
+    "es": "🇪🇸 İspanyolca",
+    "ar": "🇸🇦 Arapça",
+    "ja": "🇯🇵 Japonca",
+    "zh": "🇨🇳 Çince",
+    "it": "🇮🇹 İtalyanca",
+    "pt": "🇵🇹 Portekizce",
+    "sv": "🇸🇪 İsveççe",
 }
 
 def get_config_dir():

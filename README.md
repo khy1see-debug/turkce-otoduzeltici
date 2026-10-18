@@ -1,12 +1,14 @@
 # 🇹🇷 Çevrimdışı Türkçe Otomatik Düzeltici (0-Token)
 
-Bitişik yazılan (örn: `sendemigeliyorusn`), imla, harf ve bağlaç hataları barındıran Türkçe metinleri **çevrimdışı (offline)** ve **sıfır (0) token maliyetiyle** otomatik düzelten, modern masaüstü/web stüdyosu arayüzüne, REST API'ye ve sistem tepsisi (system tray) kısayoluna sahip akıllı doğal dil işleme platformu.
+Bitişik yazılan (örn: `sendemigeliyorusn`), imla, harf ve bağlaç hataları barındıran Türkçe metinleri **yerel (local) motorla sıfır (0) token maliyetine ve çevrimdışı olarak** otomatik düzelten, modern masaüstü/web stüdyosu arayüzüne, REST API'ye ve sistem tepsisi (system tray) kısayoluna sahip akıllı doğal dil işleme platformu.
+
+**Yerel düzeltme motoru** hiçbir API anahtarı ve ağ erişimine ihtiyaç duymamakla birlikte, **isteğe bağlı olarak** Yapay Zeka (AI) düzeltme, çeviri ve web tabanlı bilgi/çeviri fallback özellikleri de sunulur. Bu opsiyonel özellikler yalnızca kullanıcı açıkça etkinleştirdiği anda ağ kullanır.
 
 ---
 
 ## ⚡ Özellikler
 
-- **0 Token Maliyeti & %100 Gizlilik:** Herhangi bir bulut servisi veya LLM API'si çağırmaz, tamamen yerel CPU üzerinde, verileriniz dışarı çıkmadan anında çalışır.
+- **0 Token Maliyeti & %100 Gizlilik (Yerel Motor):** Yerel düzeltme motoru hiçbir bulut servisi veya LLM API'si çağırmamakla birlikte, tamamen yerel CPU üzerinde, verileriniz dışarı çıkmadan anında çalışır. Bu mod **%100 çevrimdışıdır**.
 - **✨ Çift Panelli Masaüstü Stüdyosu (GUI):** Giriş / Düzeltilmiş Çıktı, canlı diff vurgulama, örnek metinler, harf/kelime sayacı ve tek tıkla kopyalama.
 - **🌐 Tarayıcı Tabanlı Web Stüdyosu & REST API:** Herhangi bir kurulum yapmadan tarayıcıdan çalışan DeepL / LanguageTool standartlarında Web Stüdyosu ve harici uygulamalar için REST API.
 - **⌨️ Global Kısayol Tuşu & Sistem Tepsisi (Tray):** Herhangi bir programda (Discord, WhatsApp, Word, Tarayıcı, Kod Editörü vb.) bir metni fareyle seçip **`Alt+Q`** tuşuna bastığınızda seçili metni anında panoda düzeltip yerine yapıştırır.
@@ -25,6 +27,18 @@ Bitişik yazılan (örn: `sendemigeliyorusn`), imla, harf ve bağlaç hataları 
   - Bağlaç olan *-ki* ayrımı (`demek ki`, `öyle ki`, `iyi ki`)
 - **🧹 Harf Uzatmalarını Temizleme (Elongation Reduction):** `geliyoruuuum` $\rightarrow$ `geliyorum`, `çooooook` $\rightarrow$ `çok`, `lütfeeeen` $\rightarrow$ `lütfen`
 - **💬 Chat Argosu ve Kısaltmaları:** `slm` $\rightarrow$ `selam`, `nbr` $\rightarrow$ `naber`, `knk` $\rightarrow$ `kanka`, `tşk` $\rightarrow$ `teşekkürler`
+
+---
+
+## 🔌 Opsiyonel Ağ / AI / Çeviri / Web Fallback Özellikleri
+
+Yerel düzeltme motoru tamamen çevrimdışıdır. Aşağıdaki özellikler **isteğe bağlıdır** ve yalnızca kullanıcı açıkça etkinleştirdiği anda ağ kullanır:
+
+- **🤖 İsteğe bağlı AI Düzeltme:** Yerel motorun çıktısını bir büyük dil modeli (Groq / Gemini / NVIDIA) ile bağlamsal olarak mükemmelleştirir. API anahtarı gerektirir; `network_policy` ayarıyla denetlenir.
+- **🌐 İsteğe bağlı Çeviri:** Türkçe ⇄ İngilizce / Rusçe / Almanca vb. çeviri. AI veya sıfır maliyetli web tabanlı çeviri (Google Translate) üzerinden sağlanır.
+- **📚 İsteğe bağlı Web / Wikipedia Fallback:** Bilgi sorgusu (`/bilgi`) ve çeviri için web tabanlı yedek kaynaklar.
+
+> **Gizlilik:** API anahtarları kod içinde veya loglarda **saklanmaz**; yalnızca `settings.json` veya ortam değişkenleri üzerinden tutulur. Ağ kullanımı sadece opsiyonel özellikler etkinse gerçekleşir.
 
 ---
 

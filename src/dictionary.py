@@ -5,6 +5,7 @@ Zemberek çekimleri, TDK resmi sözlüğü ve günlük konuşma dili ağırlıkl
 
 import os
 import sys
+import re
 import math
 import gzip
 import tempfile
@@ -46,6 +47,13 @@ BLOCKED_SHORT_CHUNKS = {
     "h1", "g3", "g4", "dü", "zi", "do", "iğ", "to", "wp", "r2", "hz",
     "sn", "dk", "km", "kg", "tl", "cm", "mm", "vs", "vb",
     "ticarici", "disarici", "dışarıcı", "yapıyors", "nıyor", "deniyo",
+    "naısl", "naıslsın", "naıslsınız", "naıslım", "naıslsındır",
+    "nsaıl", "nasl", "naslsn", "naslsnz", "nasllsln", "nasllslnlz",
+    "geliyrsun", "bilmyor", "bilmyorum", "bilmyordum", "bilmyoruz",
+    "gıdıyor", "gıdıyorum", "gıdıyorsun", "gıdıyorsunuz", "gıdıyoruz",
+    "bılmıyorum", "bılmıyor", "bılmıyorsun", "bılmıyordu",
+    "gıtmek", "gıtmış", "gıtsem", "gıtmiş", "gıttı",
+    "ınsan", "ınsanlar",
     "b", "c", "ç", "d", "e", "f", "g", "ğ", "h", "ı", "i", "j", "k", "l", "m", "n", "p", "r", "s", "ş", "t", "u", "ü", "v", "y", "z"
 }
 
@@ -105,10 +113,51 @@ CRITICAL_GRAMMAR_WORDS = {
     "ve": 0.040, "ne": 0.025, "bu": 0.035, "şu": 0.020
 }
 
+REPEATED_LETTERS_REGEX = re.compile(r"([a-zçğıöşü])\1{2,}")
+INVALID_DOUBLE_CONSONANTS_REGEX = re.compile(r"([bcdfghjklmnprsştvyz])\1$")
+LEGIT_DOUBLE_CONSONANT_WORDS = {
+    "hakk", "hatt", "hiss", "hall", "zamm", "zann", "rabb", "cedd", "sedd", "hadd", "madd", "küll", "şekk", "tıbb"
+}
+
+CORPUS_LEAKED_MISSPELLINGS = {
+    "mesala", "sanrım", "sanrıım", "sanırm", "herkez", "yalnış", "yanlız",
+    "orjinal", "labaratuvar", "süpriz", "supriz", "insiyatif", "eksoz",
+    "şarz", "sarz", "dinazor", "karnıbahar", "ayrıyeten", "tesbit",
+    "müsade", "muhattap", "mütahhit", "birde", "hemde", "yada",
+    "ekliyelim", "başlıyalım", "bekliyelim", "söyliyelim", "izliyelim", "dinliyelim",
+    "olmıyan", "olmıyna", "secicem", "seçicem", "sevicem", "englsihce", "englıshce",
+    "eklerizde", "yaparızda", "giderizde",
+}
+
+
+def is_corrupted_corpus_word(w: str) -> bool:
+    """Ham veri setinden sızmış bozuk OCR ve harf dönüşüm artıklarını eler."""
+    if w in CORPUS_LEAKED_MISSPELLINGS:
+        return True
+    if w.startswith(("herşey", "birşey", "bişey", "hiçbirşey", "çokşey", "hersey", "birsey", "bisey", "hicbirsey")):
+        return True
+    if w.startswith("bır") and not w.startswith("bırak"):
+        return True
+    if w.startswith("bılm"):
+        return True
+    if w.startswith("ıns"):
+        return True
+    if w.startswith("gıdıy"):
+        return True
+    if w.startswith("gıt") and "gıt-gıt" not in w:
+        return True
+    return False
+
 def is_valid_word(word: str) -> bool:
     """Kelimenin Türkçe sözlükte olup olmadığını O(1) hızla kontrol eder."""
     w = turkish_lower(word)
     if w in BLOCKED_SHORT_CHUNKS:
+        return False
+    if REPEATED_LETTERS_REGEX.search(w):
+        return False
+    if len(w) <= 5 and INVALID_DOUBLE_CONSONANTS_REGEX.search(w) and w not in LEGIT_DOUBLE_CONSONANT_WORDS:
+        return False
+    if is_corrupted_corpus_word(w):
         return False
     return (
         w in ALL_TURKISH_WORDS
@@ -123,6 +172,12 @@ def get_word_prob(word: str) -> float:
     """Kelimenin log-olasılığını döner."""
     w = turkish_lower(word)
     if w in BLOCKED_SHORT_CHUNKS:
+        return -50.0
+    if REPEATED_LETTERS_REGEX.search(w):
+        return -50.0
+    if len(w) <= 5 and INVALID_DOUBLE_CONSONANTS_REGEX.search(w) and w not in LEGIT_DOUBLE_CONSONANT_WORDS:
+        return -50.0
+    if is_corrupted_corpus_word(w):
         return -50.0
 
     if w in PERSONAL_WORDS:

@@ -11,7 +11,7 @@ import sqlite3
 import logging
 from pathlib import Path
 from collections import Counter
-from typing import Dict, List, Tuple, Any
+from typing import Dict, Any
 
 if sys.platform == "win32":
     try:
@@ -171,7 +171,7 @@ def print_report():
     print("=" * 60)
     
     logs = report["log_analysis"]
-    print(f"\n[1] LOG ANALİZİ (app.log)")
+    print("\n[1] LOG ANALİZİ (app.log)")
     print(f"  Toplam Log Satırı: {logs.get('total_lines', 0)}")
     if logs.get("errors"):
         print("  Hata Dağılımı:")
@@ -181,7 +181,7 @@ def print_report():
         print("  Kritik hata tespit edilmedi (Tüm servisler sağlıklı).")
 
     db = report["database_analysis"]
-    print(f"\n[2] KULLANICI DÜZELTME & ÖĞRENME VERİTABANI (self_learning.db)")
+    print("\n[2] KULLANICI DÜZELTME & ÖĞRENME VERİTABANI (self_learning.db)")
     print(f"  Kayıtlı Düzeltme Olayı: {db.get('total_corrections', 0)}")
     
     if db.get("learned_words_promoted"):
@@ -205,7 +205,7 @@ def print_report():
         for phr, cnt in report["frequent_phrases"][:6]:
             print(f"    - \"{phr}\" ({cnt} kez)")
 
-    print(f"\n[5] KİŞİSEL SÖZLÜK DURUMU")
+    print("\n[5] KİŞİSEL SÖZLÜK DURUMU")
     print(f"  Toplam Kişisel Kelime: {report['total_personal_words']}")
     if report["personal_words_sample"]:
         print(f"  Son Eklenenler: {', '.join(report['personal_words_sample'])}")

@@ -80,22 +80,100 @@ TDK_COMMON_MISSPELLINGS = {
     "ardıardına": "ardı ardına",
     "peşisıra": "peşi sıra",
     "yanısıra": "yanı sıra",
+    "mesala": "mesela",
+    "sanrıım": "sanırım",
+    "sanrım": "sanırım",
+    "sanırm": "sanırım",
+    "sanirim": "sanırım",
+    "birde": "bir de",
+    "hemde": "hem de",
+    "yada": "ya da",
+    "ekliyelim": "ekleyelim",
+    "ekliyebilir": "ekleyebilir",
+    "başlıyalım": "başlayalım",
+    "bekliyelim": "bekleyelim",
+    "söyliyelim": "söyleyelim",
+    "izliyelim": "izleyelim",
+    "dinliyelim": "dinleyelim",
+    "anlıyamadım": "anlayamadım",
+    "olmıyan": "olmayan",
+    "olmıyna": "olmayan",
+    "olmıycak": "olmayacak",
+    "olmıyacak": "olmayacak",
+    "secicem": "seçeceğim",
+    "seçicem": "seçeceğim",
+    "sevçicem": "seçeceğim",
+    "secicez": "seçeceğiz",
+    "seçicez": "seçeceğiz",
+    "sevçicez": "seçeceğiz",
+    "englsihce": "İngilizce",
+    "englıshce": "İngilizce",
+    "inglizce": "İngilizce",
+    "gelitşir": "geliştir",
+    "baska": "başka",
+    "isviççe": "İsveççe",
+    "isvicce": "İsveççe",
+    "isveçce": "İsveççe",
+    "isvecce": "İsveççe",
 }
 
 CHAT_SLANG_MAP = {
     # --- "Şey" İfadeleri (TDK: daima ayrı) ---
     "hersey": "her şey",
     "herşey": "her şey",
+    "herseyi": "her şeyi",
+    "herşeyi": "her şeyi",
+    "herseyin": "her şeyin",
+    "herşeyin": "her şeyin",
+    "herseye": "her şeye",
+    "herşeye": "her şeye",
+    "herseyde": "her şeyde",
+    "herşeyde": "her şeyde",
+    "herseyden": "her şeyden",
+    "herşeyden": "her şeyden",
+    "herseyle": "her şeyle",
+    "herşeyle": "her şeyle",
     "bişey": "bir şey",
     "bisey": "bir şey",
     "birsey": "bir şey",
     "birşey": "bir şey",
+    "birseyi": "bir şeyi",
+    "birşeyi": "bir şeyi",
+    "biseyi": "bir şeyi",
+    "bişeyi": "bir şeyi",
+    "birseyin": "bir şeyin",
+    "birşeyin": "bir şeyin",
+    "biseyin": "bir şeyin",
+    "bişeyin": "bir şeyin",
+    "birseye": "bir şeye",
+    "birşeye": "bir şeye",
+    "biseye": "bir şeye",
+    "bişeye": "bir şeye",
+    "birseyde": "bir şeyde",
+    "birşeyde": "bir şeyde",
+    "birseyden": "bir şeyden",
+    "birşeyden": "bir şeyden",
+    "birşeyler": "bir şeyler",
+    "birşeyleri": "bir şeyleri",
+    "bişeyler": "bir şeyler",
+    "biseyler": "bir şeyler",
+    "birseyler": "bir şeyler",
     "hiçbirşey": "hiçbir şey",
     "hicbirsey": "hiçbir şey",
+    "hiçbirşeyi": "hiçbir şeyi",
+    "hicbirseyi": "hiçbir şeyi",
+    "hiçbirşeyin": "hiçbir şeyin",
+    "hicbirseyin": "hiçbir şeyin",
     "bisi": "bir şey",
     "bişi": "bir şey",
+    "bisiler": "bir şeyler",
+    "bişiler": "bir şeyler",
+    "bisiyi": "bir şeyi",
+    "bişiyi": "bir şeyi",
     "coksey": "çok şey",
     "çokşey": "çok şey",
+    "cokseyi": "çok şeyi",
+    "çokşeyi": "çok şeyi",
     "hicbisi": "hiçbir şey",
     "hiçbişi": "hiçbir şey",
     "hicbir": "hiçbir",
@@ -103,6 +181,50 @@ CHAT_SLANG_MAP = {
     "hiçbi": "hiçbir",
 
     # --- Günlük Konuşma, Kalıplar ve Soru İfadeleri ---
+    "naısl": "nasıl",
+    "naıslsın": "nasılsın",
+    "naıslsınız": "nasılsınız",
+    "nsaıl": "nasıl",
+    "naslsn": "nasılsın",
+    "naslsnz": "nasılsınız",
+    "nasılsnz": "nasılsınız",
+    "gıdıyor": "gidiyor",
+    "gıdıyorum": "gidiyorum",
+    "gıdıyorsun": "gidiyorsun",
+    "gıdıyoruz": "gidiyoruz",
+    "gıdıyorsunuz": "gidiyorsunuz",
+    "bılmıyorum": "bilmiyorum",
+    "bılmıyor": "bilmiyor",
+    "bılmıyorsun": "bilmiyorsun",
+    "yaprken": "yaparken",
+    "geliyorsn": "geliyorsun",
+    "gidiyorsn": "gidiyorsun",
+    "tmmdır": "tamamdır",
+    "tmdır": "tamamdır",
+    "skntı": "sıkıntı",
+    "sknti": "sıkıntı",
+    "sıkntı": "sıkıntı",
+    "ztn": "zaten",
+    "bgn": "bugün",
+    "yrn": "yarın",
+    "artarda": "art arda",
+    "yanyana": "yan yana",
+    "elele": "el ele",
+    "yuzyuze": "yüz yüze",
+    "pespese": "peş peşe",
+    "peşpeşe": "peş peşe",
+    "basbasa": "baş başa",
+    "başbaşa": "baş başa",
+    "icice": "iç içe",
+    "içiçe": "iç içe",
+    "gozgoze": "göz göze",
+    "gözgöze": "göz göze",
+    "dizdize": "diz dize",
+    "gundengune": "günden güne",
+    "gündengüne": "günden güne",
+    "adımadım": "adım adım",
+    "şöyleki": "şöyle ki",
+    "gördümki": "gördüm ki",
     "bune": "bu ne",
     "şune": "şu ne",
     "sune": "şu ne",
@@ -423,14 +545,16 @@ def expand_colloquial_verb(token: str) -> Optional[str]:
         if is_valid_word(cand):
             return cand
 
-    # -icek / -ıcak / -ücek / -ucak + ekler (örn: düzelticekleri -> düzeltecekleri, göndericem -> göndereceğim)
+    # -icek / -ıcak / -ücek / -ucak ve gereksiz daralma (-iyelim / -ıyalım / -iyemedi / -ıyamadı)
     for narrow, wide in [
         ("icem", "eceğim"), ("ıcam", "acağım"), ("ucam", "acağım"), ("ücem", "eceğim"),
         ("icez", "eceğiz"), ("ıcaz", "acağız"), ("ucaz", "acağız"), ("ücez", "eceğiz"),
         ("icek", "ecek"), ("ıcak", "acak"), ("ucak", "acak"), ("ücek", "ecek"),
         ("iceğ", "eceğ"), ("ıcağ", "acağ"), ("ucağ", "acağ"), ("üceğ", "eceğ"),
+        ("iyelim", "eyelim"), ("ıyalım", "ayalım"), ("iyeyim", "eyeyim"), ("ıyayım", "ayayım"),
+        ("iyebilir", "eyebilir"), ("ıyabilir", "ayabilir"), ("iyemedi", "eyemedi"), ("ıyamadı", "ayamadı"),
     ]:
-        if narrow in clean_w:
+        if narrow in clean_w and not clean_w.startswith(("diye", "yiye")):
             cand = deasciify_word(clean_w.replace(narrow, wide, 1))
             if is_valid_word(cand):
                 return cand
@@ -438,11 +562,37 @@ def expand_colloquial_verb(token: str) -> Optional[str]:
     return None
 
 
+ATTACHED_VERBAL_DE_REGEX = re.compile(
+    r"^([a-zçğıöşü]{2,}(?:riz|rız|ruz|rüz|iriz|ırız|uruz|ürüz|eriz|arız|sak|sek|sam|sem|dık|dik|duk|dük|tık|tik|tuk|tük|yoruz|yorsunuz|acağız|eceğiz|alım|elim))(da|de|ta|te)$",
+    re.IGNORECASE
+)
+
+
 def expand_slang(token: str) -> Optional[str]:
     """Kısaltma, TDK yaygın hatası veya chat argo kelimesini tam Türkçe karşılığına açar."""
     w = turkish_lower(token)
     if w in ALL_EXPANSIONS:
         return ALL_EXPANSIONS[w]
+
+    # Fiil çekiminden sonra bitişik yazılmış bağlaç 'de/da' kontrolü (örn: eklerizde -> ekleriz de, yaparızda -> yaparız da)
+    m_vde = ATTACHED_VERBAL_DE_REGEX.match(w)
+    if m_vde:
+        stem_raw = m_vde.group(1)
+        deasc_stem = deasciify_word(stem_raw)
+        canonical_stem = deasc_stem if is_valid_word(deasc_stem) else stem_raw
+        if is_valid_word(canonical_stem):
+            vowels = [c for c in canonical_stem if c in "aıoueöiü"]
+            de_norm = "da" if vowels and vowels[-1] in "aıou" else "de"
+            return f"{canonical_stem} {de_norm}"
+
+    # Bitişik yazılmış her+şey / bir+şey / hiçbir+şey çekimli halleri (örn: herşeyimiz -> her şeyimiz)
+    m_sey = re.match(r"^(her|hiçbir|hicbir|bir|bi|çok|cok)(?:şey|sey)([a-zçğıöşü]*)$", w)
+    if m_sey:
+        prefix_part, suffix_part = m_sey.group(1), m_sey.group(2)
+        prefix_map = {"her": "her", "hiçbir": "hiçbir", "hicbir": "hiçbir", "bir": "bir", "bi": "bir", "çok": "çok", "cok": "çok"}
+        sey_word = deasciify_word("şey" + suffix_part) if suffix_part else "şey"
+        if is_valid_word(sey_word):
+            return f"{prefix_map[prefix_part]} {sey_word}"
 
     # Günlük fiil çekim normalizasyonu
     verb_cand = expand_colloquial_verb(w)

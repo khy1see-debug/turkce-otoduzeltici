@@ -37,7 +37,32 @@ def correct_word(word: str, max_distance: int = 1) -> str:
     if is_valid_word(word_clean):
         return word_clean
 
-    # 1.A: Tekrarlayan hece temizliği (örn: cikalalim -> cikalim -> çıkalım)
+    # 1.A: Harf uzatması ve tuş basılı kalma temizliği (örn: benn -> ben, gittttim -> gittim, nasılll -> nasıl)
+    end_dedup = re.sub(r'([a-zçğıöşü])\1+$', r'\1', word_clean)
+    if end_dedup != word_clean:
+        d_end = deasciify_word(end_dedup)
+        if is_valid_word(d_end):
+            return d_end
+        if is_valid_word(end_dedup):
+            return end_dedup
+
+    single_dedup = re.sub(r'([a-zçğıöşü])\1{2,}', r'\1', word_clean)
+    if single_dedup != word_clean:
+        d_single = deasciify_word(single_dedup)
+        if is_valid_word(d_single):
+            return d_single
+        if is_valid_word(single_dedup):
+            return single_dedup
+
+    double_dedup = re.sub(r'([a-zçğıöşü])\1{2,}', r'\1\1', word_clean)
+    if double_dedup != word_clean:
+        d_double = deasciify_word(double_dedup)
+        if is_valid_word(d_double):
+            return d_double
+        if is_valid_word(double_dedup):
+            return double_dedup
+
+    # 1.B: Tekrarlayan hece temizliği (örn: cikalalim -> cikalim -> çıkalım)
     syllable_dedup = re.sub(r'([a-zçğıöşü]{2,3})\1+', r'\1', word_clean)
     if syllable_dedup != word_clean:
         d_cand = deasciify_word(syllable_dedup)
@@ -46,9 +71,21 @@ def correct_word(word: str, max_distance: int = 1) -> str:
         if is_valid_word(syllable_dedup):
             return syllable_dedup
 
-    # 1.B: Tüm 1-adım düzenleme adayları (O(1) sözlük kontrolü + hızlı deasciify)
+    # 1.C: Türkçe Karakter ve Noktalı/Noktasız Ünlü Kayması (ı <-> i, ü <-> u, ö <-> o)
+    vowel_swap_cands = set()
+    for pair in [('ı', 'i'), ('i', 'ı'), ('ü', 'u'), ('u', 'ü'), ('ö', 'o'), ('o', 'ö')]:
+        if pair[0] in word_clean:
+            sw = word_clean.replace(pair[0], pair[1])
+            d_sw = deasciify_word(sw)
+            if is_valid_word(d_sw):
+                vowel_swap_cands.add(d_sw)
+            if is_valid_word(sw):
+                vowel_swap_cands.add(sw)
+
+    # 1.D: Tüm 1-adım düzenleme adayları (O(1) sözlük kontrolü + hızlı deasciify)
     cands1 = edits1(word_clean)
     valid_cands1 = {c for c in cands1 if is_valid_word(c)}
+    valid_cands1.update(vowel_swap_cands)
 
     splits = [(word_clean[:i], word_clean[i:]) for i in range(len(word_clean) + 1)]
     fast_edits = (

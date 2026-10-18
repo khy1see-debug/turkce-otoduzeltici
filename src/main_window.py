@@ -34,6 +34,9 @@ from src.autostart import set_autostart, is_autostart_enabled
 from src.ai_engine import (
     fix_with_ai,
     translate_with_ai,
+    free_web_translate,
+    is_definitely_foreign_text,
+    detect_source_language,
     test_nvidia_connection,
     AVAILABLE_MODELS,
     test_gemini_connection,
@@ -225,7 +228,7 @@ class MainWindow(QMainWindow):
     def __init__(self, tray_icon=None):
         super().__init__()
         self.tray_icon = tray_icon
-        self.setWindowTitle("🇹🇷 Türkçe Otomatik Düzeltici — Gelişmiş Stüdyo & NVIDIA AI")
+        self.setWindowTitle("🇹🇷 Türkçe Otomatik Düzeltici — Gelişmiş Stüdyo (Groq LPU & Gemini AI)")
         self.setMinimumSize(QSize(900, 620))
 
         # İkon yükle
@@ -297,7 +300,7 @@ class MainWindow(QMainWindow):
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
             "🤖 Otomatik Akıllı Algılama (Stil, Harf Düzeni ve İmlayı Kendi Anlar)",
-            "✨ Yapay Zeka ile Düzelt (Google Gemini / NVIDIA NIM)",
+            "✨ Yapay Zeka ile Düzelt (Groq LPU / Google Gemini / NVIDIA NIM)",
             "🇹🇷 Tam Akıllı Düzeltme (TDK + Segmenter + İmla + Noktalama)",
             "🔤 De-asciifier (ASCII ➜ Türkçe Harfler: c,g,i,o,s,u ➜ ç,ğ,ı,ö,ş,ü)",
             "🌐 Asciifier (Türkçe ➜ ASCII: ç,ğ,ı,ö,ş,ü ➜ c,g,i,o,s,u)",
@@ -307,8 +310,19 @@ class MainWindow(QMainWindow):
             "🔠 Baş Harfleri Büyüt (Başlık Düzeni)",
             "🌍 Akıllı Çeviri (TR ⇄ EN Otomatik Algıla)",
             "🇹🇷 ➜ 🇬🇧 Türkçe ➜ İngilizce Çeviri",
-            "🇬🇧 ➜ 🇹🇷 İngilizce ➜ Türkçe Çeviri"
+            "🇬🇧 ➜ 🇹🇷 İngilizce ➜ Türkçe Çeviri",
+            "🇷🇺 Akıllı Rusça Çeviri (TR ⇄ RU Otomatik Algıla)",
+            "🇹🇷 ➜ 🇷🇺 Türkçe ➜ Rusça Çeviri",
+            "🇷🇺 ➜ 🇹🇷 Rusça ➜ Türkçe Çeviri",
+            "🇩🇪 Türkçe ➜ Almanca Çeviri",
+            "🇫🇷 Türkçe ➜ Fransızca Çeviri",
+            "🇪🇸 Türkçe ➜ İspanyolca Çeviri",
+            "🇸🇦 Türkçe ➜ Arapça Çeviri",
+            "🇯🇵 Türkçe ➜ Japonca Çeviri",
+            "🇨🇳 Türkçe ➜ Çince Çeviri",
+            "🇸🇪 Türkçe ➜ İsveççe Çeviri"
         ])
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
         top_bar.addWidget(QLabel("Dönüşüm Modu:"))
         top_bar.addWidget(self.mode_combo, stretch=2)
 
@@ -350,7 +364,7 @@ class MainWindow(QMainWindow):
         input_layout.addLayout(input_header)
 
         self.input_edit = QTextEdit()
-        self.input_edit.setPlaceholderText("Düzeltilecek veya çevrilecek Türkçe metni buraya yazın veya yapıştırın...\n(Örn: sendemigeliyorusn bugun hava cok guzel)")
+        self.input_edit.setPlaceholderText("Düzeltilecek veya çevrilecek metni (Türkçe / İngilizce / Rusça) buraya yazın veya yapıştırın...\n(Örn: sendemigeliyorusn bugun hava cok guzel)")
         self.input_edit.textChanged.connect(self.on_input_text_changed)
         input_layout.addWidget(self.input_edit)
 
@@ -372,6 +386,12 @@ class MainWindow(QMainWindow):
         self.diff_check.toggled.connect(self.toggle_diff_view)
         output_header.addWidget(self.diff_check)
 
+        self.swap_btn = QPushButton("🔄 Çıktıyı Girişe Al")
+        self.swap_btn.setObjectName("secondaryBtn")
+        self.swap_btn.setToolTip("Çevrilen veya düzeltilen sonucu sol giriş kutusuna aktarır")
+        self.swap_btn.clicked.connect(self.swap_output_to_input)
+        output_header.addWidget(self.swap_btn)
+
         self.copy_btn = QPushButton("📋 Kopyala")
         self.copy_btn.clicked.connect(self.copy_output)
         output_header.addWidget(self.copy_btn)
@@ -379,8 +399,9 @@ class MainWindow(QMainWindow):
         output_layout.addLayout(output_header)
 
         self.output_edit = QTextEdit()
-        self.output_edit.setPlaceholderText("Düzeltilmiş sonuç burada görünecektir.")
+        self.output_edit.setPlaceholderText("Düzeltilmiş veya çevrilmiş sonuç burada görünecektir.")
         output_layout.addWidget(self.output_edit)
+        self._last_clean_result = ""
 
         splitter.addWidget(output_widget)
         main_layout.addWidget(splitter, stretch=1)
@@ -393,6 +414,24 @@ class MainWindow(QMainWindow):
         bottom_bar.addWidget(self.status_msg_label)
 
         bottom_bar.addStretch()
+
+        self.en_translate_btn = QPushButton("🌍 İngilizce Çevir (TR ⇄ EN)")
+        self.en_translate_btn.setToolTip("Metni anında Türkçe ⇄ İngilizce çevirir (Global kısayol: Alt+W)")
+        self.en_translate_btn.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #0369a1); "
+            "color: white; font-size: 13px; padding: 10px 18px; border-radius: 9px; font-weight: bold;"
+        )
+        self.en_translate_btn.clicked.connect(self.perform_quick_english_translation)
+        bottom_bar.addWidget(self.en_translate_btn)
+
+        self.ru_translate_btn = QPushButton("🇷🇺 Rusça Çevir (TR ⇄ RU)")
+        self.ru_translate_btn.setToolTip("Metni anında Türkçe ⇄ Rusça çevirir (Global kısayol: Alt+R)")
+        self.ru_translate_btn.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #dc2626); "
+            "color: white; font-size: 13px; padding: 10px 18px; border-radius: 9px; font-weight: bold;"
+        )
+        self.ru_translate_btn.clicked.connect(self.perform_quick_russian_translation)
+        bottom_bar.addWidget(self.ru_translate_btn)
 
         self.correct_btn = QPushButton("✨ Şimdi Düzelt")
         self.correct_btn.setObjectName("actionBtn")
@@ -408,7 +447,13 @@ class MainWindow(QMainWindow):
         self.input_stats_label.setText(f"{chars} karakter | {words} kelime")
 
         if self.live_check.isChecked():
-            self.live_timer.start(250)
+            # Çeviri modlarında canlı ağ çağrısı spamlamamak için daha uzun gecikme
+            delay = 650 if self.mode_combo.currentIndex() >= 9 else 250
+            self.live_timer.start(delay)
+
+    def on_mode_changed(self, index: int):
+        if hasattr(self, "input_edit") and self.input_edit.toPlainText().strip():
+            self.apply_transformation(record_stats=True)
 
     def load_sample_text(self, index: int):
         if index > 0 and index <= len(SAMPLE_TEXTS):
@@ -419,10 +464,18 @@ class MainWindow(QMainWindow):
     def clear_text(self):
         self.input_edit.clear()
         self.output_edit.clear()
+        self._last_clean_result = ""
+        self.output_stats_label.setText("0 karakter | 0 kelime")
         self.status_msg_label.setText("Temizlendi.")
 
+    def swap_output_to_input(self):
+        clean_text = self._last_clean_result or self.output_edit.toPlainText().strip()
+        if clean_text:
+            self.input_edit.setPlainText(clean_text)
+            self.status_msg_label.setText("Çıktı metni sol giriş paneline aktarıldı.")
+
     def copy_output(self):
-        text = self.output_edit.toPlainText()
+        text = self._last_clean_result or self.output_edit.toPlainText()
         if text:
             clipboard = QApplication.clipboard()
             clipboard.setText(text)
@@ -433,6 +486,23 @@ class MainWindow(QMainWindow):
         self.apply_transformation(record_stats=False)
 
     def perform_manual_correction(self):
+        # Çeviri modunda kalmışsa 'Şimdi Düzelt' tıklandığında imla düzeltme moduna dön
+        if self.mode_combo.currentIndex() >= 9:
+            self.mode_combo.blockSignals(True)
+            self.mode_combo.setCurrentIndex(0)
+            self.mode_combo.blockSignals(False)
+        self.apply_transformation(record_stats=True)
+
+    def perform_quick_english_translation(self):
+        self.mode_combo.blockSignals(True)
+        self.mode_combo.setCurrentIndex(9)
+        self.mode_combo.blockSignals(False)
+        self.apply_transformation(record_stats=True)
+
+    def perform_quick_russian_translation(self):
+        self.mode_combo.blockSignals(True)
+        self.mode_combo.setCurrentIndex(12)
+        self.mode_combo.blockSignals(False)
         self.apply_transformation(record_stats=True)
 
     def apply_transformation(self, record_stats: bool = True):
@@ -440,29 +510,45 @@ class MainWindow(QMainWindow):
             raw_text = self.input_edit.toPlainText().strip()
             if not raw_text:
                 self.output_edit.clear()
+                self._last_clean_result = ""
                 return
 
             mode_idx = self.mode_combo.currentIndex()
             t0 = time.time()
 
             engine_label = "Yerel Motor"
+            is_translation_result = mode_idx >= 9
             if mode_idx == 0:
-                # 🤖 Otomatik Akıllı Algılama
-                is_all_caps = raw_text.isupper() and len([c for c in raw_text if c.isalpha()]) > 2
-                result = fix_sentence(raw_text)
-                if is_all_caps:
-                    result = turkish_upper(result)
-                engine_label = "Akıllı İmla & Yerel Motor"
+                # 🤖 Otomatik Akıllı Algılama (Yabancı Mesaj Çevirisi + Hibrit Türkçe Düzeltme)
+                if is_definitely_foreign_text(raw_text):
+                    src_lang = detect_source_language(raw_text)
+                    ai_tr = translate_with_ai(raw_text, target_lang="tr") or free_web_translate(raw_text, target_lang="tr")
+                    result = ai_tr.strip() if (ai_tr and ai_tr.strip()) else raw_text
+                    engine_label = f"Otomatik Yabancı Dil Çevirisi ({src_lang.upper()} ➜ TR)"
+                    is_translation_result = True
+                else:
+                    is_all_caps = raw_text.isupper() and len([c for c in raw_text if c.isalpha()]) > 2
+                    local_fixed = fix_sentence(raw_text)
+                    result = local_fixed
+                    engine_label = "Akıllı İmla & Yerel Motor"
+                    if record_stats:
+                        ai_res = fix_with_ai(local_fixed)
+                        if ai_res and ai_res.strip():
+                            result = ai_res.strip()
+                            engine_label = "Hibrit Motor (Yerel + Yapay Zeka)"
+                    if is_all_caps:
+                        result = turkish_upper(result)
             elif mode_idx == 1:
-                # ✨ Yapay Zeka ile Düzelt (Google Gemini / NVIDIA NIM)
-                ai_res = fix_with_ai(raw_text)
+                # ✨ Yapay Zeka ile Düzelt (Hibrit: Yerel Ön-Düzeltme + Groq / Gemini / NIM)
+                local_fixed = fix_sentence(raw_text)
+                ai_res = fix_with_ai(local_fixed)
                 if ai_res and ai_res.strip():
                     result = ai_res.strip()
                     prov = self.settings.get("ai_provider", "auto").upper()
-                    engine_label = f"Yapay Zeka Bulut Motoru ({prov})"
+                    engine_label = f"Hibrit Yapay Zeka Motoru ({prov})"
                 else:
                     # Geri düşüş
-                    result = fix_sentence(raw_text)
+                    result = local_fixed
                     engine_label = "Yerel 1.66M+ Motor (Çevrimdışı / API Bağlantısı Yok)"
             elif mode_idx == 2:
                 # Tam Akıllı Düzeltme
@@ -499,24 +585,75 @@ class MainWindow(QMainWindow):
                 # 🌍 Akıllı Çeviri (TR ⇄ EN)
                 ai_tr = translate_with_ai(raw_text, target_lang="auto")
                 result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
-                engine_label = "NVIDIA AI Akıllı Çeviri (TR ⇄ EN)"
+                engine_label = "AI Akıllı Çeviri (TR ⇄ EN)"
             elif mode_idx == 10:
                 # 🇹🇷 ➜ 🇬🇧 Türkçe ➜ İngilizce
-                ai_tr = translate_with_ai(raw_text, target_lang="en")
+                ai_tr = translate_with_ai(raw_text, target_lang="en") or free_web_translate(raw_text, target_lang="en")
                 result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
-                engine_label = "NVIDIA AI Türkçe ➜ İngilizce Çeviri"
+                engine_label = "AI Türkçe ➜ İngilizce Çeviri"
             elif mode_idx == 11:
                 # 🇬🇧 ➜ 🇹🇷 İngilizce ➜ Türkçe
-                ai_tr = translate_with_ai(raw_text, target_lang="tr")
+                ai_tr = translate_with_ai(raw_text, target_lang="tr") or free_web_translate(raw_text, target_lang="tr")
                 result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
-                engine_label = "NVIDIA AI İngilizce ➜ Türkçe Çeviri"
+                engine_label = "AI İngilizce ➜ Türkçe Çeviri"
+            elif mode_idx == 12:
+                # 🇷🇺 Akıllı Rusça Çeviri (TR ⇄ RU)
+                ai_tr = translate_with_ai(raw_text, target_lang="auto_ru")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Akıllı Çeviri (TR ⇄ RU)"
+            elif mode_idx == 13:
+                # 🇹🇷 ➜ 🇷🇺 Türkçe ➜ Rusça
+                ai_tr = translate_with_ai(raw_text, target_lang="ru") or free_web_translate(raw_text, target_lang="ru")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ Rusça Çeviri"
+            elif mode_idx == 14:
+                # 🇷🇺 ➜ 🇹🇷 Rusça ➜ Türkçe
+                ai_tr = translate_with_ai(raw_text, target_lang="tr") or free_web_translate(raw_text, target_lang="tr")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Rusça ➜ Türkçe Çeviri"
+            elif mode_idx == 15:
+                # 🇩🇪 Türkçe ➜ Almanca
+                ai_tr = translate_with_ai(raw_text, target_lang="de") or free_web_translate(raw_text, target_lang="de")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ Almanca Çeviri"
+            elif mode_idx == 16:
+                # 🇫🇷 Türkçe ➜ Fransızca
+                ai_tr = translate_with_ai(raw_text, target_lang="fr") or free_web_translate(raw_text, target_lang="fr")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ Fransızca Çeviri"
+            elif mode_idx == 17:
+                # 🇪🇸 Türkçe ➜ İspanyolca
+                ai_tr = translate_with_ai(raw_text, target_lang="es") or free_web_translate(raw_text, target_lang="es")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ İspanyolca Çeviri"
+            elif mode_idx == 18:
+                # 🇸🇦 Türkçe ➜ Arapça
+                ai_tr = translate_with_ai(raw_text, target_lang="ar") or free_web_translate(raw_text, target_lang="ar")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ Arapça Çeviri"
+            elif mode_idx == 19:
+                # 🇯🇵 Türkçe ➜ Japonca
+                ai_tr = translate_with_ai(raw_text, target_lang="ja") or free_web_translate(raw_text, target_lang="ja")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ Japonca Çeviri"
+            elif mode_idx == 20:
+                # 🇨🇳 Türkçe ➜ Çince
+                ai_tr = translate_with_ai(raw_text, target_lang="zh") or free_web_translate(raw_text, target_lang="zh")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ Çince Çeviri"
+            elif mode_idx == 21:
+                # 🇸🇪 Türkçe ➜ İsveççe
+                ai_tr = translate_with_ai(raw_text, target_lang="sv") or free_web_translate(raw_text, target_lang="sv")
+                result = ai_tr if (ai_tr and ai_tr.strip()) else raw_text
+                engine_label = "AI Türkçe ➜ İsveççe Çeviri"
             else:
                 result = fix_sentence(raw_text)
 
             elapsed_ms = (time.time() - t0) * 1000
+            self._last_clean_result = result
 
-            # Diff görünümü veya düz metin
-            if self.diff_check.isChecked():
+            # Diff görünümü (çeviri modlarında kelime bazlı diff iki dili üst üste bindirdiği için düz metin göster)
+            if self.diff_check.isChecked() and not is_translation_result:
                 self.render_diff(raw_text, result)
             else:
                 self.output_edit.setPlainText(result)
@@ -540,11 +677,11 @@ class MainWindow(QMainWindow):
             print(f"Arayüz düzeltme hatası: {e}")
 
     def toggle_diff_view(self, checked: bool):
-        raw = self.input_edit.toPlainText()
-        out = self.output_edit.toPlainText()
-        if checked and raw and out:
+        raw = self.input_edit.toPlainText().strip()
+        out = self._last_clean_result or self.output_edit.toPlainText().strip()
+        if checked and raw and out and self.mode_combo.currentIndex() < 9:
             self.render_diff(raw, out)
-        elif not checked and out:
+        elif out:
             # Düz metne geri dön
             self.output_edit.setPlainText(out)
 
@@ -726,7 +863,7 @@ class MainWindow(QMainWindow):
         hotkey_layout.addWidget(self.hotkey_edit)
         hotkey_vbox.addLayout(hotkey_layout)
 
-        hotkey_info = QLabel("💡 <b>Alt+Q:</b> İmla, bağlam ve TDK düzeltmesi | <b>Alt+W:</b> TR ⇄ EN Anında Çeviri | <b>Alt+E:</b> Hızlı Soru & Bilgi Motoru<br><i>(Türkçe klavyede <b>@</b> ve <b>€</b> için AltGr tuşu donanım düzeyinde korunur; metni seçmeden imleç satır sonundayken de basabilirsiniz.)</i>")
+        hotkey_info = QLabel("💡 <b>Alt+Q:</b> İmla, bağlam ve TDK düzeltmesi | <b>Alt+W:</b> TR ⇄ EN İngilizce Çeviri | <b>Alt+R:</b> TR ⇄ RU Rusça Çeviri | <b>Alt+E:</b> Hızlı Soru & Bilgi Motoru<br><i>(Türkçe klavyede <b>@</b> ve <b>€</b> için AltGr tuşu donanım düzeyinde korunur; metni seçmeden imleç satır sonundayken de basabilirsiniz.)</i>")
         hotkey_info.setWordWrap(True)
         hotkey_info.setStyleSheet("color: #38bdf8; font-size: 11px; margin-top: 4px;")
         hotkey_vbox.addWidget(hotkey_info)
@@ -767,7 +904,7 @@ class MainWindow(QMainWindow):
 
         self.ai_provider_combo = QComboBox()
         self.ai_provider_combo.addItem("🤖 Otomatik Algıla (En Hızlı Dönen Kazanır)", "auto")
-        self.ai_provider_combo.addItem("⚡ Groq Cloud (Llama 3.3 70B - Ultra Düşük Gecikme)", "groq")
+        self.ai_provider_combo.addItem("⚡ Groq Cloud (GPT-OSS 120B / Qwen 3.8 - Ultra Düşük Gecikme ~200ms)", "groq")
         self.ai_provider_combo.addItem("✨ Google Gemini API (Ultra Hızlı, Geniş Kota, Gemini 3.5)", "gemini")
         self.ai_provider_combo.addItem("🟢 NVIDIA NIM API (Llama 3.2 11B / OSS)", "nvidia")
         ai_layout.addRow("Öncelikli Yapay Zeka:", self.ai_provider_combo)
@@ -921,7 +1058,7 @@ class MainWindow(QMainWindow):
             self.gemini_test_result_label.setStyleSheet("color: #ef4444; font-size: 11px;")
             return
 
-        model_id = self.gemini_model_combo.currentData() or "gemini-2.0-flash"
+        model_id = self.gemini_model_combo.currentData() or DEFAULT_GEMINI_MODEL
         self.gemini_test_result_label.setText("⏳ Gemini bağlantısı test ediliyor...")
         self.gemini_test_result_label.setStyleSheet("color: #38bdf8; font-size: 11px;")
         QApplication.processEvents()

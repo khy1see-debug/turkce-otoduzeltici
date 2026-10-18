@@ -130,14 +130,20 @@ def main():
 
     # Yapay Zeka ile Düzeltme Modu
     if args.ai:
-        from src.ai_engine import fix_with_ai
+        from src.ai_engine import NetworkError, PolicyError, fix_with_ai
         from src.grammar import fix_sentence
         target_text = args.text or "sendemigeliyorusn"
-        ai_res = fix_with_ai(target_text)
-        if ai_res:
-            print(ai_res)
-        else:
-            print("[!] NVIDIA API anahtarı ayarlanmamış veya bağlantı yok. Yerel motorla düzeltildi:", file=sys.stderr)
+        try:
+            ai_res = fix_with_ai(target_text)
+            if ai_res:
+                print(ai_res)
+            else:
+                print(fix_sentence(target_text))
+        except PolicyError as exc:
+            print(f"[!] {exc}", file=sys.stderr)
+            print(fix_sentence(target_text))
+        except NetworkError as exc:
+            print(f"[!] AI hizmetine bağlanılamadı: {exc}", file=sys.stderr)
             print(fix_sentence(target_text))
         return 0
 

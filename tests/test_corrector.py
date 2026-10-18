@@ -15,6 +15,14 @@ def test_separated_words_with_typo():
     assert correct_word("geliyorusn") == "geliyorsun"
     assert correct_word("gidiyorusn") == "gidiyorsun"
 
+def test_transposition_typos():
+    """Hızlı yazımda oluşan harf yer değişimleri (naıslsınız -> nasılsınız)."""
+    assert correct_word("naıslsınız") == "nasılsınız"
+    assert correct_word("naısl") == "nasıl"
+    assert correct_word("naıslsın") == "nasılsın"
+    assert fix_sentence("gunaydın naıslsınız") == "Günaydın, nasılsınız?"
+    assert fix_sentence("Günaydın naıslsınız") == "Günaydın, nasılsınız?"
+
 def test_deasciifier():
     """İngilizce harflerin Türkçeleştirilmesi."""
     assert deasciify_word("ogrenci") == "öğrenci"
@@ -146,13 +154,43 @@ def test_tdk_time_and_number_grammar():
 
 def test_homonyms_and_root_loanwords_not_corrupted():
     """Cins isim eş seslileri (abi, canı, denize, yağmurda, orduda) ve alıntı kökler (takdir, mahcup) bozulmamalı."""
-    assert fix_sentence("abi naber") == "Abi naber."
+    assert fix_sentence("abi naber") == "Abi naber?"
     assert fix_sentence("canı sıkıldı") == "Canı sıkıldı."
     assert fix_sentence("denize gittik") == "Denize gittik."
     assert fix_sentence("yağmurda ıslandık") == "Yağmurda ıslandık."
     assert fix_sentence("orduda görev yaptı") == "Orduda görev yaptı."
     assert fix_sentence("takdir ettim mahcup oldum") == "Takdir ettim mahcup oldum."
     assert fix_sentence("bugün işi bitirdim") == "Bugün işi bitirdim."
+
+
+def test_tdk_sound_changes_and_compounds():
+    """Ünlü düşmesi, ünsüz yumuşaması, birleşik fiiller ve tipografi testleri."""
+    from src.tdk_rules import apply_tdk_rules
+    # Ünlü Düşmesi
+    assert "aklıma" in apply_tdk_rules("akılıma gelmedi") or "aklı" in apply_tdk_rules("onun akılı")
+    assert "ağzı" in apply_tdk_rules("onun ağızı açık kaldı")
+    assert "fikri" in apply_tdk_rules("onun fikiri güzel")
+    assert "şehrin" in apply_tdk_rules("bu şehirin havası")
+
+    # Ünsüz Yumuşaması
+    assert "kitabı" in apply_tdk_rules("bu kitapı oku")
+    assert "çocuğu" in apply_tdk_rules("küçük çocuku gördüm")
+    assert "sokağa" in apply_tdk_rules("sokaka çıktım")
+
+    # Bitişik Birleşik Fiiller (Ses olayı olanlar bitişik)
+    assert "kayboldu" in apply_tdk_rules("anahtar kayıp oldu")
+    assert "hissediyorum" in apply_tdk_rules("bunu his ediyorum")
+    assert "affetti" in apply_tdk_rules("öğretmen onu af etti")
+    assert "sabret" in apply_tdk_rules("biraz sabır et")
+
+    # Üleştirme Sayıları (TDK kuralı: 2'şer değil ikişer)
+    assert "ikişer" in apply_tdk_rules("öğrenciler 2'şer sıra oldu")
+    assert "beşer" in apply_tdk_rules("herkese 5'er elma")
+
+    # Tipografi ve Yüzde Temizliği
+    assert apply_tdk_rules("merhaba , dünya") == "merhaba, dünya"
+    assert "%50" in apply_tdk_rules("indirim oranı % 50 oldu")
+
 
 
 def test_devrik_and_colloquial_complex_sentences():
@@ -163,3 +201,41 @@ def test_devrik_and_colloquial_complex_sentences():
         "yaptığı projeyi bastan sona gözden geçir ve düzelticekleri düzelt geliştir ve banasun"
     ) == "Yaptığı projeyi baştan sona gözden geçir ve düzeltecekleri düzelt geliştir ve bana sun."
 
+def test_advanced_grammar_and_punctuation():
+    """Gelişmiş harf düzeltme, bağlaçlar, hitap virgülü, ikilemeler ve soru işareti testleri."""
+    assert fix_sentence("merhaba nasılsın") == "Merhaba, nasılsın?"
+    assert fix_sentence("selam naber") == "Selam, naber?"
+    assert fix_sentence("neredesin") == "Neredesin?"
+    assert fix_sentence("ne zaman geliyorsun") == "Ne zaman geliyorsun?"
+    assert fix_sentence("bende geliyorum") == "Ben de geliyorum."
+    assert fix_sentence("iyiki varsın") == "İyi ki varsın."
+    assert fix_sentence("artarda goller attık") == "Art arda goller attık."
+    assert fix_sentence("benn ve senn") == "Ben ve sen."
+    assert fix_sentence("çooook güzel") == "Çok güzel."
+    assert fix_sentence("gıdıyorum") == "Gidiyorum."
+
+
+def test_real_world_chat_and_complex_user_sentences():
+    """Gerçek kullanıcı mesajlarındaki ekliyelim/birde/herseyi/sanrıım/mesala/yazıyorya düzeltmeleri."""
+    assert fix_sentence("Birde rusça çevirme tuşu Ekliyelim") == "Bir de Rusça çevirme tuşu ekleyelim."
+    assert (
+        fix_sentence("bu çevirme tr eng onların bunların herseyi düzelt geliştir. bazınbuglar var sanrıım")
+        == "Bu çevirme TR ENG onların bunların her şeyi düzelt geliştir. Bazı buglar var sanırım."
+    )
+    assert (
+        fix_sentence(
+            "Ve birde mesala biri bana bisi yazıyorya hangi dil olursa olsun otomatik çevirebilirmiyiz ama ondan önce bu düzeltme olayını çok iyi yapmalıyız"
+        )
+        == "Ve bir de mesela biri bana bir şey yazıyor ya hangi dil olursa olsun otomatik çevirebilir miyiz, ama ondan önce bu düzeltme olayını çok iyi yapmalıyız."
+    )
+    assert fix_sentence("eklerizde") == "Ekleriz de."
+    assert fix_sentence("yaparızda") == "Yaparız da."
+    assert fix_sentence("giderizde") == "Gideriz de."
+    assert fix_sentence("bunu gelitşir") == "Bunu geliştir."
+    assert (
+        fix_sentence("hayır onu eklerizde önce şimdi ben baska bir dil yani rusça ve englsihce olmıyna bir dili hangi tusla sevçicem")
+        == "Hayır onu ekleriz de önce şimdi ben başka bir dil yani Rusça ve İngilizce olmayan bir dili hangi tuşla seçeceğim?"
+    )
+    assert fix_sentence("isviççe ekle") == "İsveççe ekle."
+    assert fix_sentence("isveçce konuşuyor") == "İsveççe konuşuyor."
+    assert fix_sentence("isviççe öğrenmek istiyorum") == "İsveççe öğrenmek istiyorum."

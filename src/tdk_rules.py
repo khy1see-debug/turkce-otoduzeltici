@@ -54,7 +54,25 @@ ACRONYM_SUFFIX_CORRECTIONS = {
 }
 
 TECH_ACRONYMS = {
-    "pc", "gpu", "cpu", "ram", "ssd", "usb", "dc", "tr", "ai", "llm"
+    "pc", "gpu", "cpu", "ram", "ssd", "usb", "dc", "tr", "eng", "ai", "llm"
+}
+
+LANGUAGE_NORMALIZATION_MAP = {
+    "türkçe": "Türkçe", "turkce": "Türkçe", "türkce": "Türkçe",
+    "ingilizce": "İngilizce",
+    "rusça": "Rusça", "rusca": "Rusça",
+    "almanca": "Almanca",
+    "fransızca": "Fransızca", "fransizca": "Fransızca",
+    "ispanyolca": "İspanyolca",
+    "italyanca": "İtalyanca",
+    "arapça": "Arapça", "arapca": "Arapça",
+    "japonca": "Japonca",
+    "çince": "Çince", "cince": "Çince",
+    "korece": "Korece",
+    "portekizce": "Portekizce",
+    "yunanca": "Yunanca",
+    "farsça": "Farsça", "farsca": "Farsça",
+    "isveççe": "İsveççe", "isveçce": "İsveççe", "isvecce": "İsveççe", "isviççe": "İsveççe", "isvicce": "İsveççe",
 }
 
 KNOWN_ACRONYMS = {
@@ -111,7 +129,7 @@ COLLOQUIAL_REDUCTIONS = {
     "kitapcı": "kitapçı", "kitapda": "kitapta", "kitapdan": "kitaptan",
     "ağaçda": "ağaçta", "ağaçdan": "ağaçtan", "sokakda": "sokakta",
     "sokakdan": "sokaktan", "sınıfda": "sınıfta", "sınıfdan": "sınıftan",
-    "yavaşca": "yavaşça", "türkce": "türkçe", "türkcede": "türkçede",
+    "yavaşca": "yavaşça", "türkce": "Türkçe", "türkcede": "Türkçede",
     "aşcı": "aşçı", "aşcılık": "aşçılık", "çiftci": "çiftçi",
     "simitci": "simitçi", "balıkcı": "balıkçı", "işci": "işçi",
     "saatci": "saatçi", "sabahdan": "sabahtan", "yapdı": "yaptı",
@@ -190,6 +208,21 @@ def fix_proper_nouns_and_acronyms(text: str) -> str:
         clean_word = word.strip(".,!?:;\"'()[]{}")
         punc_suffix = word[len(clean_word):] if len(clean_word) < len(word) else ""
         lower_clean = turkish_lower(clean_word)
+
+        # 0. Dil isimleri kontrolü (TDK: Dil adları büyük harfle başlar ve yapım eki olduğu için kesme işaretiyle ayrılmaz)
+        lang_handled = False
+        for lang_key, lang_proper in LANGUAGE_NORMALIZATION_MAP.items():
+            if lower_clean == lang_key:
+                result_words.append(lang_proper + punc_suffix)
+                lang_handled = True
+                break
+            elif lower_clean.startswith(lang_key) and lower_clean[len(lang_key):] in all_suffixes_flat:
+                suffix = lower_clean[len(lang_key):]
+                result_words.append(f"{lang_proper}{suffix}{punc_suffix}")
+                lang_handled = True
+                break
+        if lang_handled:
+            continue
 
         # 1. Kısaltma kontrolü (Örn: TDK'ya -> TDK'ye veya TDKya -> TDK'ye)
         handled = False
@@ -366,15 +399,220 @@ def fix_time_and_number_grammar(text: str) -> str:
     return text
 
 
+# ==============================================================================
+# 4. ÜNLÜ DÜŞMESİ, ÜNSÜZ YUMUŞAMASI VE BİTİŞİK BİRLEŞİK FİİLLER (TDK)
+# ==============================================================================
+
+# Ünlü Düşmesi (Ses Düşmesi) Haritası
+VOWEL_ELISION_MAP = {
+    # Ağız
+    "ağızı": "ağzı", "ağızım": "ağzım", "ağızın": "ağzın", "ağıza": "ağza", "ağızda": "ağızda",
+    # Akıl
+    "akılı": "aklı", "akılım": "aklım", "akılın": "aklın", "akıla": "akla",
+    # Fikir
+    "fikiri": "fikri", "fikirim": "fikrim", "fikirin": "fikrin", "fikire": "fikre",
+    # Şehir
+    "şehiri": "şehri", "şehire": "şehre", "şehirim": "şehrim", "şehirin": "şehrin",
+    # Ömür
+    "ömürü": "ömrü", "ömürüm": "ömrüm", "ömürün": "ömrün", "ömüre": "ömre",
+    # Burun
+    "burunu": "burnu", "burunum": "burnum", "burunun": "burnun", "buruna": "burna",
+    # Alın
+    "alını": "alnı", "alınım": "alnım", "alının": "alnının", "alına": "alna",
+    # Boyun
+    "boyunu": "boynu", "boyunum": "boynum", "boyunun": "boynun", "boyuna": "boynuna",
+    # Omuz
+    "omuzu": "omzu", "omuzum": "omzum", "omuzun": "omzun", "omuza": "omza",
+    # Göğüs
+    "göğüsü": "göğsü", "göğüsüm": "göğsüm", "göğüsün": "göğsün", "göğüse": "göğse",
+    # Karın
+    "karını": "karnı", "karınım": "karnım", "karının": "karnın", "karına": "karna",
+    # Gönül
+    "gönülü": "gönlü", "gönülüm": "gönlüm", "gönülün": "gönlün", "gönüle": "gönle",
+    # İsim
+    "isimi": "ismi", "isimim": "ismim", "isimin": "ismin", "isime": "isme",
+    # Resim
+    "resimi": "resmi", "resimim": "resmim", "resimin": "resmin", "resime": "resme",
+    # Vakit
+    "vakiti": "vakti", "vakitimiz": "vaktimiz", "vakite": "vakte",
+    # Sabır
+    "sabırı": "sabrı", "sabırım": "sabrım", "sabıra": "sabra",
+    # Kayıp
+    "kayıpı": "kaybı", "kayıpa": "kayba",
+    # Ne için / Ne asıl birleşmesi
+    "ne için": "niçin", "ne asıl": "nasıl"
+}
+
+# Ünsüz Yumuşaması Haritası (p, ç, t, k -> b, c, d, ğ/g)
+CONSONANT_SOFTENING_MAP = {
+    # Kitap
+    "kitapı": "kitabı", "kitapım": "kitabım", "kitapın": "kitabın", "kitapa": "kitaba",
+    # Çiçek
+    "çiçeki": "çiçeği", "çiçeke": "çiçeğe", "çiçekim": "çiçeğim", "çiçekin": "çiçeğin",
+    # Çocuk
+    "çocuku": "çocuğu", "çocuka": "çocuğa", "çocukun": "çocuğun", "çocukumuz": "çocuğumuz",
+    # Sokak
+    "sokakı": "sokağı", "sokaka": "sokağa",
+    # Ağaç
+    "ağaçı": "ağacı", "ağaça": "ağaca", "ağaçın": "ağacın",
+    # İlaç
+    "ilaçı": "ilacı", "ilaça": "ilaca", "ilaçım": "ilacım", "ilaçın": "ilacın",
+    # Ayak
+    "ayakı": "ayağı", "ayaka": "ayağa", "ayakım": "ayağım", "ayakın": "ayağın",
+    # Kalp
+    "kalpi": "kalbi", "kalpim": "kalbim", "kalpin": "kalbin", "kalpe": "kalbe",
+    # Dert
+    "derti": "derdi", "dertim": "derdim", "derte": "derde", "dertin": "derdin",
+    # Renk
+    "renki": "rengi", "renke": "renge", "renkim": "rengim",
+    # Mutfak
+    "mutfakı": "mutfağı", "mutfaka": "mutfağa",
+    # Ekmek
+    "ekmeki": "ekmeği", "ekmeke": "ekmeğe",
+    # Bebek
+    "bebeki": "bebeği", "bebeke": "bebeğe", "bebekim": "bebeğim", "bebekin": "bebeğin"
+}
+
+# Bitişik Yazılan Birleşik Fiiller (Ses düşmesi veya türemesi olanlar bitişik yazılır)
+COMPOUND_VERBS_MAP = {
+    # Kayıp olmak / etmek
+    "kayıp olmak": "kaybolmak", "kayıp oldu": "kayboldu", "kayıp olmuş": "kaybolmuş",
+    "kayıp olur": "kaybolur", "kayıp oluyor": "kayboluyor", "kayıp ol": "kaybol",
+    "kayıp etmek": "kaybetmek", "kayıp etti": "kaybetti", "kayıp etmiş": "kaybetmiş",
+    "kayıp eder": "kaybeder", "kayıp ediyor": "kaybediyor", "kayıp et": "kaybet",
+    # His etmek
+    "his etmek": "hissetmek", "his etti": "hissetti", "his etmiş": "hissetmiş",
+    "his eder": "hisseder", "his ediyor": "hissediyor", "his et": "hisset",
+    "his ediyorum": "hissediyorum", "his ediyorsun": "hissediyorsun", "his ediyoruz": "hissediyoruz",
+    # Af etmek
+    "af etmek": "affetmek", "af etti": "affetti", "af etmiş": "affetmiş",
+    "af eder": "affeder", "af ediyor": "affediyor", "af et": "affet",
+    "af edersiniz": "affedersiniz", "af edersin": "affedersin",
+    # Sabır etmek
+    "sabır etmek": "sabretmek", "sabır etti": "sabretti", "sabır etmiş": "sabretmiş",
+    "sabır eder": "sabreder", "sabır ediyor": "sabrediyor", "sabır et": "sabret",
+    # Şükür etmek
+    "şükür etmek": "şükretmek", "şükür etti": "şükretti", "şükür etmiş": "şükretmiş",
+    "şükür eder": "şükreder", "şükür ediyor": "şükrediyor", "şükür et": "şükret",
+    # Emir etmek
+    "emir etmek": "emretmek", "emir etti": "emretti", "emir etmiş": "emretmiş",
+    "emir eder": "emreder", "emir ediyor": "emrediyor", "emir et": "emret",
+    # Hapis olmak / etmek
+    "hapis olmak": "hapsolmak", "hapis oldu": "hapsoldu",
+    "hapis etmek": "hapsetmek", "hapis etti": "hapsetti",
+    # Zan etmek
+    "zan etmek": "zannetmek", "zan etti": "zannetti", "zan etmiş": "zannetmiş",
+    "zan eder": "zanneder", "zan ediyor": "zannediyor", "zan ediyorum": "zannediyorum",
+    # Hall olmak / etmek
+    "hal olmak": "hallolmak", "hal oldu": "halloldu", "hal olur": "hallolur",
+    "hal etmek": "halletmek", "hal etti": "halletti", "hal eder": "halleder", "hallet": "hallet",
+    # Red etmek
+    "red etmek": "reddetmek", "red etti": "reddetti", "red etmiş": "reddetmiş",
+    "red eder": "reddeder", "red ediyor": "reddediyor",
+    # Terk etmek / Park etmek / Fark etmek (Bunlar TDK gereği AYRI yazılır)
+    "terketmek": "terk etmek", "terketti": "terk etti",
+    "farketmek": "fark etmek", "farketti": "fark etti", "farketmez": "fark etmez",
+    "parketmek": "park etmek", "parketti": "park etti",
+    "arzetmek": "arz etmek", "arzederim": "arz ederim",
+    "sağol": "sağ ol", "sağolun": "sağ olun", "hoşçakal": "hoşça kal", "hoşgeldiniz": "hoş geldiniz"
+}
+
+# Üleştirme sayıları rakamla değil yazıyla yazılır (TDK kuralı: 2'şer değil ikişer)
+DISTRIBUTIVE_NUMERALS = {
+    "1'er": "birer", "1'erli": "birerli",
+    "2'şer": "ikişer", "2'şerli": "ikişerli",
+    "3'er": "üçer", "3'erli": "üçerli",
+    "4'er": "dörder", "4'erli": "dörderli",
+    "5'er": "beşer", "5'erli": "beşerli",
+    "6'şar": "altışar", "6'şarlı": "altışarlı",
+    "7'şer": "yedişer", "7'şerli": "yedişerli",
+    "8'er": "sekizer", "8'erli": "sekizerli",
+    "9'ar": "dokuzar", "9'arlı": "dokuzarlı",
+    "10'ar": "onar", "10'arlı": "onarlı",
+    "20'şer": "yirmişer", "50'şer": "ellişer", "100'er": "yüzer"
+}
+
+
+def fix_sound_changes_and_compounds(text: str) -> str:
+    """
+    Ünlü düşmesi, ünsüz yumuşaması ve bitişik/ayrı birleşik fiil kurallarını uygular.
+    """
+    # 1. Çok kelimeli birleşik fiiller ve kalıplar (Örn: 'kayıp oldu' -> 'kayboldu', 'his ediyorum' -> 'hissediyorum')
+    for wrong_phr, right_phr in COMPOUND_VERBS_MAP.items():
+        # Kelime sınırlarına duyarlı regex değişimi
+        pattern = rf'(?<!\w){re.escape(wrong_phr)}(?!\w)'
+        text = re.sub(pattern, right_phr, text, flags=re.IGNORECASE)
+
+    # 2. Üleştirme sayıları (2'şer -> ikişer, 5'er -> beşer)
+    for wrong_num, right_num in DISTRIBUTIVE_NUMERALS.items():
+        pattern = rf'(?<!\w){re.escape(wrong_num)}(?!\w)'
+        text = re.sub(pattern, right_num, text, flags=re.IGNORECASE)
+
+    # 3. Tek kelimelik ses olayları (ünlü düşmesi & ünsüz yumuşaması)
+    words = text.split(" ")
+    result_words = []
+
+    for word in words:
+        clean_word = word.strip(".,!?:;\"'()[]{}")
+        punc_prefix = word[:len(word) - len(word.lstrip(".,!?:;\"'()[]{}"))]
+        punc_suffix = word[len(punc_prefix) + len(clean_word):]
+        lower_clean = turkish_lower(clean_word)
+
+        replacement = None
+        # Ünlü düşmesi kontrolü
+        if lower_clean in VOWEL_ELISION_MAP:
+            replacement = VOWEL_ELISION_MAP[lower_clean]
+        # Ünsüz yumuşaması kontrolü
+        elif lower_clean in CONSONANT_SOFTENING_MAP:
+            replacement = CONSONANT_SOFTENING_MAP[lower_clean]
+
+        if replacement:
+            if clean_word and clean_word[0].isupper():
+                replacement = turkish_capitalize(replacement)
+            result_words.append(f"{punc_prefix}{replacement}{punc_suffix}")
+        else:
+            result_words.append(word)
+
+    return " ".join(result_words)
+
+
+def fix_typography_and_spacing(text: str) -> str:
+    """
+    Tipografi, noktalama ve boşluk kurallarını TDK standardına göre temizler:
+    - Noktalama işaretlerinden önceki gereksiz boşlukları temizler ('merhaba , dünya' -> 'merhaba, dünya')
+    - Emojileri ve gülen yüzleri (':)', ':D', ';)') bozmaz
+    - Yüzde işaretinin sayıdan önce ve boşluksuz yazılması ('% 50' / '50 %' -> '%50')
+    """
+    # Noktalama öncesi boşluk temizliği:
+    # Yalnızca virgül, noktalı virgül, soru işareti, ünlem ve ardında boşluk/son gelen noktalar
+    # Gülen yüzlerdeki ':)', ':D', ';)' ifadelerini bozmamak için iki nokta (:) hariç tutulur veya ardı kontrol edilir
+    text = re.sub(r'\s+([,;?!…])', r'\1', text)
+    # Nokta öncesi boşluk (ardında boşluk veya satır sonu varsa)
+    text = re.sub(r'\s+(\.)(?=\s|$)', r'\1', text)
+
+    # TDK Türkçe Yüzde İmlası: Sayıdan önce ve bitişik yazılır (%20, %50)
+    # Örn: "% 50" -> "%50"
+    text = re.sub(r'%\s+(\d+)', r'%\1', text)
+    # Örn: "50 %" veya "50%" -> "%50"
+    text = re.sub(r'\b(\d+)\s*%', r'%\1', text)
+
+    return text
+
+
+
 def apply_tdk_rules(text: str) -> str:
     """
-    Tüm TDK kurallarını (özel isimler, kısaltmalar, Fıstıkçı Şahap, konuşma dili, sayı/saat)
-    sırayla metne uygular.
+    Tüm TDK kurallarını (özel isimler, kısaltmalar, Fıstıkçı Şahap, konuşma dili,
+    sayı/saat, ses olayları, birleşik fiiller ve tipografi) sırayla metne uygular.
     """
-    # 1. Saat ve sayı kuralları
+    # 1. Tipografi ve boşluk temizliği
+    text = fix_typography_and_spacing(text)
+    # 2. Saat ve sayı kuralları
     text = fix_time_and_number_grammar(text)
-    # 2. Özel isimler ve kısaltmalarda kesme işareti
+    # 3. Özel isimler ve kısaltmalarda kesme işareti
     text = fix_proper_nouns_and_acronyms(text)
-    # 3. Ünsüz benzeşmesi ve konuşma dili daralmaları
+    # 4. Ünsüz benzeşmesi ve konuşma dili daralmaları
     text = fix_consonant_and_colloquial(text)
+    # 5. Ünlü düşmesi, ünsüz yumuşaması ve birleşik fiiller
+    text = fix_sound_changes_and_compounds(text)
     return text

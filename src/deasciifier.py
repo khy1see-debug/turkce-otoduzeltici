@@ -104,5 +104,6 @@ def _preserve_case_pattern(original: str, converted: str) -> str:
     if original.isupper():
         return turkish_upper(converted)
     if original and original[0].isupper():
-        return converted[0].upper() + converted[1:]
+        from src.turkish_case import turkish_capitalize
+        return turkish_capitalize(converted)
     return converted

@@ -7,10 +7,11 @@ import sys
 import os
 import time
 import threading
+from typing import Optional
 import pyperclip
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor, QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 # Import managers
 from src import settings_manager
@@ -34,6 +35,9 @@ refresh_personal_dictionary(force=True)
 # Initialize managers
 _stats_manager = StatisticsManager()
 _notification_manager = NotificationManager()
+
+# Yüzen balon örneği (SystemTrayApp oluşturulunca atanır); arka plan çeviri thread'leri sonuç kartı için kullanır
+_floating_pill = None
 
 
 def create_icon_image() -> QIcon:
@@ -182,9 +186,9 @@ class Win32GlobalHotkeyThread(threading.Thread):
         self.stop_event.set()
 
 
-def _release_and_mask_modifiers(extra_vks=(0x51, 0x57, 0x45), max_wait_sec=0.35):
+def _release_and_mask_modifiers(extra_vks=(0x51, 0x57, 0x45, 0x52, 0x54), max_wait_sec=0.35):
     """
-    Fiziksel tuşların (Alt, Ctrl, Shift, Q, W, E) bırakılmasını bekler
+    Fiziksel tuşların (Alt, Ctrl, Shift, Q, W, E, R, T) bırakılmasını bekler
     ve Windows'un Menü Çubuğunu (Menu Bar / Focus Steal) tetiklemesini 0xFF maskeleme tuşuyla engeller.
     """
     if sys.platform != "win32":
@@ -218,7 +222,7 @@ def _release_and_mask_modifiers(extra_vks=(0x51, 0x57, 0x45), max_wait_sec=0.35)
 
 
 def _send_win32_key_combination(ctrl_key: str):
-    """Windows'ta basılı olabilecek tuşları serbest bırakarak güvenli Ctrl+C veya Ctrl+V gönderir."""
+    """Windows'ta basılı olabilecek tuşları serbest bırakarak donanım tarama kodlarıyla (ScanCode) güvenli Ctrl+C veya Ctrl+V gönderir."""
     if sys.platform == "win32":
         try:
             import ctypes
@@ -226,15 +230,17 @@ def _send_win32_key_combination(ctrl_key: str):
             # 1. Alt, Ctrl, Shift ve harf tuşlarını temizle
             _release_and_mask_modifiers(max_wait_sec=0.2)
 
-            # 2. Ctrl + key gönder
+            # 2. Donanım ScanCode ile Ctrl + key gönder
             vk_code = 0x43 if ctrl_key.lower() == 'c' else 0x56  # 0x43 = 'C', 0x56 = 'V'
-            user32.keybd_event(0x11, 0, 0, 0)  # Ctrl DOWN
+            ctrl_scan = user32.MapVirtualKeyW(0x11, 0)
+            key_scan = user32.MapVirtualKeyW(vk_code, 0)
+            user32.keybd_event(0x11, ctrl_scan, 0, 0)  # Ctrl DOWN
             time.sleep(0.02)
-            user32.keybd_event(vk_code, 0, 0, 0)  # Key DOWN
+            user32.keybd_event(vk_code, key_scan, 0, 0)  # Key DOWN
             time.sleep(0.025)
-            user32.keybd_event(vk_code, 0, 2, 0)  # Key UP
+            user32.keybd_event(vk_code, key_scan, 2, 0)  # Key UP
             time.sleep(0.015)
-            user32.keybd_event(0x11, 0, 2, 0)  # Ctrl UP
+            user32.keybd_event(0x11, ctrl_scan, 2, 0)  # Ctrl UP
             time.sleep(0.015)
         except Exception as e:
             print(f"Key send error: {e}")
@@ -247,6 +253,20 @@ def _send_win32_key_combination(ctrl_key: str):
                 user32.keybd_event(0xFF, 0, 2, 0)
             except Exception:
                 pass
+
+
+def _ensure_foreground_hwnd(target_hwnd: int):
+    """İşlem sırasında hedef pencere odağı kaybolduysa yapıştırma öncesinde odağı geri kazandırır."""
+    if sys.platform == "win32" and target_hwnd:
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            fg = user32.GetForegroundWindow()
+            if fg and fg != target_hwnd:
+                user32.SetForegroundWindow(target_hwnd)
+                time.sleep(0.025)
+        except Exception:
+            pass
 
 
 SENTINEL_CLIPBOARD = "\x00__TURKCE_COPY_SENTINEL__\x00"
@@ -273,7 +293,7 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
     # 1. Standart Ctrl+C kopyalama denemesi
     _send_win32_key_combination('c')
     captured = ""
-    for _ in range(8):
+    for _ in range(10):
         time.sleep(0.02)
         try:
             t = pyperclip.paste()
@@ -290,18 +310,20 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
             user32 = ctypes.windll.user32
             _release_and_mask_modifiers(max_wait_sec=0.15)
 
+            shift_scan = user32.MapVirtualKeyW(0x10, 0)
+            home_scan = user32.MapVirtualKeyW(0x24, 0)
             # Shift + Home (imleçten satır başına kadar seç)
-            user32.keybd_event(0x10, 0, 0, 0)  # Shift DOWN
+            user32.keybd_event(0x10, shift_scan, 0, 0)  # Shift DOWN
             time.sleep(0.015)
-            user32.keybd_event(0x24, 0, 1, 0)  # Home DOWN
+            user32.keybd_event(0x24, home_scan, 1, 0)  # Home DOWN
             time.sleep(0.02)
-            user32.keybd_event(0x24, 0, 3, 0)  # Home UP
+            user32.keybd_event(0x24, home_scan, 3, 0)  # Home UP
             time.sleep(0.015)
-            user32.keybd_event(0x10, 0, 2, 0)  # Shift UP
+            user32.keybd_event(0x10, shift_scan, 2, 0)  # Shift UP
             time.sleep(0.02)
 
             _send_win32_key_combination('c')
-            for _ in range(8):
+            for _ in range(10):
                 time.sleep(0.02)
                 t = pyperclip.paste()
                 if t != sentinel and t.strip():
@@ -316,10 +338,18 @@ def _capture_active_text(sentinel=SENTINEL_CLIPBOARD) -> tuple[str, str]:
 
 
 def correct_selected_text():
-    """Seçili metni (veya o anki satırı) kopyalar, otomatik imla ve LLM ile düzeltip yerine yapıştırır."""
+    """Seçili metni (veya o anki satırı) kopyalar; yabancı dilde gelen mesaj ise Türkçeye çevirir, Türkçe ise TDK + AI ile düzeltir."""
     global correction_active, _last_correction_time, _last_correction_original, _last_correction_corrected
     if not correction_active:
         return
+
+    target_hwnd = 0
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            target_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        except Exception:
+            pass
 
     original_clipboard, selected_text = _capture_active_text()
     if not selected_text or not selected_text.strip():
@@ -341,8 +371,46 @@ def correct_selected_text():
         return
 
     try:
-        # 1. Önce yerel deterministik motoru çalıştır (~2ms: TDK, bitişik kelime, argo, devrik koruma)
+        from src.ai_engine import (
+            is_definitely_foreign_text,
+            translate_with_ai,
+            free_web_translate,
+            is_valid_translation_output,
+            fix_with_ai,
+        )
         settings = settings_manager.load_settings()
+
+        # 0. Birisi yabancı dilde (İngilizce, Rusça, Almanca, Fransızca, İspanyolca, Arapça, Japonca vb.)
+        # mesaj yazdığında ve kullanıcı seçip Alt+Q / Düzelt yaptığında otomatik Türkçeye çevir!
+        if is_definitely_foreign_text(clean_stripped):
+            translated_tr = translate_with_ai(clean_stripped, target_lang="tr")
+            if not translated_tr or not translated_tr.strip() or not is_valid_translation_output(clean_stripped, translated_tr, "tr"):
+                translated_tr = free_web_translate(clean_stripped, target_lang="tr")
+            if translated_tr and translated_tr.strip():
+                translated_tr = translated_tr.strip()
+                _ensure_foreground_hwnd(target_hwnd)
+                pyperclip.copy(translated_tr)
+                time.sleep(0.04)
+                _send_win32_key_combination('v')
+
+                if _floating_pill is not None:
+                    _floating_pill.show_result_card("🌍 Yabancı Mesaj ➜ Türkçe", translated_tr)
+
+                if settings.get("sound_toggle", True):
+                    _notification_manager.play_sound("success")
+                _notification_manager.show_notification(
+                    "🌍 Yabancı Mesaj ➜ Türkçe",
+                    f"{clean_stripped} ➜ {translated_tr}"
+                )
+                time.sleep(0.38)
+                if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                    try:
+                        pyperclip.copy(original_clipboard)
+                    except Exception:
+                        pass
+                return
+
+        # 1. Önce yerel deterministik motoru çalıştır (~2ms: TDK, bitişik kelime, argo, devrik koruma)
         is_all_caps = selected_text.isupper() and len([c for c in selected_text if c.isalpha()]) > 2
         local_corrected = fix_sentence(selected_text)
         if is_all_caps:
@@ -352,19 +420,33 @@ def correct_selected_text():
         used_ai = False
         corrected_text = local_corrected
 
-        # 2. Kullanıcı özellikle Tray'de AI aktif ettiyse yerel çıktıyı AI ile cilala
-        if settings.get("use_ai_in_tray", False):
+        # 2. Hibrit Yapay Zeka Cilalama (Varsayılan açık: yerel TDK çıktısını Gemini/Groq ile bağlamsal olarak mükemmelleştirir)
+        from src.ai_engine import NetworkError, PolicyError
+        from src.ai_policy import ai_allowed, policy_from_settings
+
+        policy = policy_from_settings(settings)
+        ai_enabled = settings.get("use_ai_in_tray", True) and ai_allowed(policy)
+        if ai_enabled:
             try:
-                from src.ai_engine import fix_with_ai
                 ai_res = fix_with_ai(local_corrected)
                 if ai_res and ai_res.strip():
                     corrected_text = ai_res.strip()
+                    if is_all_caps:
+                        from src.turkish_case import turkish_upper
+                        corrected_text = turkish_upper(corrected_text)
                     used_ai = True
-            except Exception:
+            except PolicyError:
+                corrected_text = local_corrected
+            except NetworkError as exc:
+                _notification_manager.show_notification(
+                    "⚠️ AI Hizmetine Bağlanılamadı",
+                    f"Yerel motorla düzeltme devam ediyor: {exc}",
+                )
                 corrected_text = local_corrected
 
         # Sonucu Yapıştır
         if corrected_text != selected_text:
+            _ensure_foreground_hwnd(target_hwnd)
             pyperclip.copy(corrected_text)
             time.sleep(0.04)
             _send_win32_key_combination('v')
@@ -382,13 +464,14 @@ def correct_selected_text():
             if settings.get("sound_toggle", True):
                 _notification_manager.play_sound("success")
 
-            title = "✨ Metin Düzeltildi (Yapay Zeka)" if used_ai else "✨ Metin Düzeltildi"
+            title = "✨ Metin Düzeltildi (TDK + AI)" if used_ai else "✨ Metin Düzeltildi"
             _notification_manager.show_notification(
                 title,
                 f"{selected_text} ➜ {corrected_text}"
             )
 
-            time.sleep(0.08)
+            # Electron/Discord/Tarayıcı IPC pano okuması tamamlanana kadar bekle (380ms)
+            time.sleep(0.38)
             if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
                 try:
                     pyperclip.copy(original_clipboard)
@@ -416,31 +499,39 @@ def correct_selected_text():
 
 
 def translate_selected_text():
-    """Seçili metni (veya o anki satırı) kopyalar, NVIDIA AI ile TR ⇄ EN çevirip yerine yapıştırır."""
+    """Seçili metni (veya panodaki gelen mesajı) hangi dilde olursa olsun Türkçeye, Türkçe ise İngilizceye çevirir."""
     global correction_active
     if not correction_active:
         return
 
+    target_hwnd = 0
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            target_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        except Exception:
+            pass
+
     original_clipboard, selected_text = _capture_active_text()
+    is_clipboard_fallback = False
     if not selected_text or not selected_text.strip():
-        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
-            try:
-                pyperclip.copy(original_clipboard)
-            except Exception:
-                pass
-        _notification_manager.show_notification(
-            "⚠️ Metin Bulunamadı",
-            "Lütfen çevirmek istediğiniz metni seçin veya imleci satır sonuna getirin."
-        )
-        return
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD and original_clipboard.strip():
+            selected_text = original_clipboard.strip()
+            is_clipboard_fallback = True
+        else:
+            _notification_manager.show_notification(
+                "⚠️ Metin Bulunamadı",
+                "Lütfen çevirmek istediğiniz metni seçin veya kopyalayıp (Ctrl+C) Alt+W yapın."
+            )
+            return
 
     try:
-        from src.ai_engine import translate_with_ai, free_web_translate, detect_source_language
+        from src.ai_engine import translate_with_ai, free_web_translate, detect_source_language, is_valid_translation_output
         src_lang = detect_source_language(selected_text)
         target_lang = "en" if src_lang == "tr" else "tr"
 
         translated = translate_with_ai(selected_text, target_lang=target_lang)
-        if not translated or not translated.strip():
+        if not translated or not translated.strip() or not is_valid_translation_output(selected_text, translated, target_lang):
             # Yedek: Hızlı ve kesintisiz web çevirisi
             translated = free_web_translate(selected_text, target_lang=target_lang)
 
@@ -457,28 +548,223 @@ def translate_selected_text():
             return
 
         translated = translated.strip()
-        pyperclip.copy(translated)
-        time.sleep(0.04)
-        _send_win32_key_combination('v')
+        if not is_clipboard_fallback:
+            _ensure_foreground_hwnd(target_hwnd)
+            pyperclip.copy(translated)
+            time.sleep(0.04)
+            _send_win32_key_combination('v')
+        else:
+            pyperclip.copy(translated)
 
         settings = settings_manager.load_settings()
         if settings.get("sound_toggle", True):
             _notification_manager.play_sound("success")
 
-        direction_title = "🌍 Türkçe ➜ İngilizce" if target_lang == "en" else "🌍 Yabancı Dil ➜ Türkçe"
+        direction_title = "🌍 Türkçe ➜ İngilizce" if target_lang == "en" else "🌍 Yabancı Mesaj ➜ Türkçe"
+        if _floating_pill is not None:
+            _floating_pill.show_result_card(direction_title, translated)
+
         _notification_manager.show_notification(
             direction_title,
             f"{selected_text} ➜ {translated}"
         )
 
-        time.sleep(0.08)
+        # Electron/Discord/Tarayıcı IPC pano okuması tamamlanana kadar bekle (380ms)
+        if not is_clipboard_fallback:
+            time.sleep(0.38)
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"Çeviri hatası: {e}")
         if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
             try:
                 pyperclip.copy(original_clipboard)
             except Exception:
                 pass
+
+
+def translate_selected_text_russian():
+    """Seçili metni (veya o anki satırı / panoyu) AI ile çift yönlü TR ⇄ RU (Rusça) çevirir."""
+    global correction_active
+    if not correction_active:
+        return
+
+    target_hwnd = 0
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            target_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        except Exception:
+            pass
+
+    original_clipboard, selected_text = _capture_active_text()
+    is_clipboard_fallback = False
+    if not selected_text or not selected_text.strip():
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD and original_clipboard.strip():
+            selected_text = original_clipboard.strip()
+            is_clipboard_fallback = True
+        else:
+            _notification_manager.show_notification(
+                "⚠️ Metin Bulunamadı",
+                "Lütfen Rusçaya/Türkçeye çevirmek istediğiniz metni seçin veya kopyalayıp Alt+R yapın."
+            )
+            return
+
+    try:
+        from src.ai_engine import translate_with_ai, free_web_translate, is_russian_text, is_valid_translation_output
+        target_lang = "tr" if is_russian_text(selected_text) else "ru"
+
+        translated = translate_with_ai(selected_text, target_lang=target_lang)
+        if not translated or not translated.strip() or not is_valid_translation_output(selected_text, translated, target_lang):
+            translated = free_web_translate(selected_text, target_lang=target_lang)
+
+        if not translated or not translated.strip():
+            _notification_manager.show_notification(
+                "⚠️ Rusça Çeviri Başarısız",
+                "Çeviri servisi yanıt vermedi."
+            )
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            return
+
+        translated = translated.strip()
+        if not is_clipboard_fallback:
+            _ensure_foreground_hwnd(target_hwnd)
+            pyperclip.copy(translated)
+            time.sleep(0.04)
+            _send_win32_key_combination('v')
+        else:
+            pyperclip.copy(translated)
+
+        settings = settings_manager.load_settings()
+        if settings.get("sound_toggle", True):
+            _notification_manager.play_sound("success")
+
+        direction_title = "🇷🇺 Türkçe ➜ Rusça" if target_lang == "ru" else "🇷🇺 Rusça ➜ Türkçe"
+        if _floating_pill is not None:
+            _floating_pill.show_result_card(direction_title, translated)
+
+        _notification_manager.show_notification(
+            direction_title,
+            f"{selected_text} ➜ {translated}"
+        )
+
+        # Electron/Discord/Tarayıcı IPC pano okuması tamamlanana kadar bekle (380ms)
+        if not is_clipboard_fallback:
+            time.sleep(0.38)
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
     except Exception as e:
-        print(f"Çeviri hatası: {e}")
+        print(f"Rusça çeviri hatası: {e}")
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+            try:
+                pyperclip.copy(original_clipboard)
+            except Exception:
+                pass
+
+def translate_selected_text_target_language(pre_captured=None, custom_target: Optional[str] = None):
+    """
+    Seçili metni kullanıcının seçtiği hedef dile (Almanca, Fransızca, İspanyolca, Arapça, Japonca vb.)
+    veya yabancı dilde gelen mesajı otomatik Türkçeye çevirir (Alt+T).
+    """
+    global correction_active
+    if not correction_active:
+        return
+
+    target_hwnd = 0
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            target_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        except Exception:
+            pass
+
+    original_clipboard, selected_text = _capture_active_text()
+    is_clipboard_fallback = False
+    if not selected_text or not selected_text.strip():
+        if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD and original_clipboard.strip():
+            selected_text = original_clipboard.strip()
+            is_clipboard_fallback = True
+        else:
+            _notification_manager.show_notification(
+                "⚠️ Metin Bulunamadı",
+                "Lütfen çevirmek istediğiniz metni seçin veya kopyalayıp Alt+T yapın."
+            )
+            return
+
+    try:
+        from src.ai_engine import (
+            translate_with_ai,
+            free_web_translate,
+            detect_source_language,
+            is_definitely_foreign_text,
+            is_valid_translation_output
+        )
+        from src.settings_manager import SUPPORTED_TRANSLATE_LANGS
+
+        settings = settings_manager.load_settings()
+        chosen_lang = custom_target or settings.get("target_translate_lang", "de")
+        lang_display = SUPPORTED_TRANSLATE_LANGS.get(chosen_lang, chosen_lang.upper())
+
+        is_foreign = is_definitely_foreign_text(selected_text) or (detect_source_language(selected_text) != "tr")
+        target_lang = "tr" if is_foreign else chosen_lang
+
+        translated = translate_with_ai(selected_text, target_lang=target_lang)
+        if not translated or not translated.strip() or not is_valid_translation_output(selected_text, translated, target_lang):
+            translated = free_web_translate(selected_text, target_lang=target_lang)
+
+        if not translated or not translated.strip():
+            _notification_manager.show_notification(
+                f"⚠️ {lang_display} Çeviri Başarısız",
+                "Çeviri servisi yanıt vermedi."
+            )
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            return
+
+        translated = translated.strip()
+        if not is_clipboard_fallback:
+            _ensure_foreground_hwnd(target_hwnd)
+            pyperclip.copy(translated)
+            time.sleep(0.04)
+            _send_win32_key_combination('v')
+        else:
+            pyperclip.copy(translated)
+
+        settings = settings_manager.load_settings()
+        if settings.get("sound_toggle", True):
+            _notification_manager.play_sound("success")
+
+        direction_title = f"🌐 Türkçe ➜ {lang_display}" if target_lang != "tr" else f"🌐 {lang_display} ➜ Türkçe"
+        if _floating_pill is not None:
+            _floating_pill.show_result_card(direction_title, translated)
+
+        _notification_manager.show_notification(
+            direction_title,
+            f"{selected_text} ➜ {translated}"
+        )
+
+        if not is_clipboard_fallback:
+            time.sleep(0.38)
+            if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"Hedef dil çeviri hatası: {e}")
         if original_clipboard and original_clipboard != SENTINEL_CLIPBOARD:
             try:
                 pyperclip.copy(original_clipboard)
@@ -629,7 +915,7 @@ class SystemTrayApp(QSystemTrayIcon):
         super().__init__(parent)
         self.app_icon = create_icon_image()
         self.setIcon(self.app_icon)
-        self.setToolTip("Türkçe Otomatik Düzeltici (Alt+Q: Düzelt | Alt+W: Çevir | Alt+E: Bilgi)")
+        self.setToolTip("Türkçe Otomatik Düzeltici (Alt+Q: Düzelt | Alt+W: EN Çevir | Alt+R: RU Çevir | Alt+E: Bilgi)")
 
         _notification_manager.set_tray_icon(self)
 
@@ -644,11 +930,17 @@ class SystemTrayApp(QSystemTrayIcon):
         self.floating_pill = FloatingCorrectionPill(
             on_correct=correct_selected_text,
             on_translate=translate_selected_text,
+            on_translate_ru=translate_selected_text_russian,
+            on_translate_target=translate_selected_text_target_language,
+            on_select_target_lang=self.set_target_translate_language,
             on_info=generate_knowledge_for_selected_text,
             on_tone=lambda: change_text_tone("formal"),
             is_active_fn=lambda: correction_active,
             enabled=self.settings.get("floating_pill_enabled", True),
+            target_lang=self.settings.get("target_translate_lang", "de"),
         )
+        global _floating_pill
+        _floating_pill = self.floating_pill
 
         self.menu = QMenu()
         self.setup_menu()
@@ -685,10 +977,36 @@ class SystemTrayApp(QSystemTrayIcon):
         self.toggle_ai_action.triggered.connect(self.toggle_ai_mode)
         self.menu.addAction(self.toggle_ai_action)
 
-        # Akıllı Çeviri Kısayol Bilgisi / Tetikleyici
-        self.translate_action = QAction("🌍 Akıllı Çeviri (Alt+W - TR ⇄ EN)", self)
+        # Akıllı Çeviri Kısayol Bilgisi / Tetikleyici (TR ⇄ EN)
+        self.translate_action = QAction("🌍 İngilizce Çeviri (Alt+W - TR ⇄ EN)", self)
         self.translate_action.triggered.connect(lambda: threading.Thread(target=translate_selected_text, daemon=True).start())
         self.menu.addAction(self.translate_action)
+
+        # Rusça Çeviri Kısayol Bilgisi / Tetikleyici (TR ⇄ RU)
+        self.translate_ru_action = QAction("🇷🇺 Rusça Çeviri (Alt+R - TR ⇄ RU)", self)
+        self.translate_ru_action.triggered.connect(lambda: threading.Thread(target=translate_selected_text_russian, daemon=True).start())
+        self.menu.addAction(self.translate_ru_action)
+
+        # Çok Dilli Hedef Çeviri (Alt+T) & Dil Seçici Menüsü
+        from src.settings_manager import SUPPORTED_TRANSLATE_LANGS
+        cur_target = self.settings.get("target_translate_lang", "de")
+        cur_target_name = SUPPORTED_TRANSLATE_LANGS.get(cur_target, cur_target.upper())
+
+        self.target_lang_menu = QMenu(f"🌐 Hedef Çeviri (Alt+T: {cur_target_name})", self.menu)
+        self.target_quick_action = QAction(f"🚀 Şimdi Çevir ➜ {cur_target_name} (Alt+T)", self.target_lang_menu)
+        self.target_quick_action.triggered.connect(lambda: threading.Thread(target=translate_selected_text_target_language, daemon=True).start())
+        self.target_lang_menu.addAction(self.target_quick_action)
+        self.target_lang_menu.addSeparator()
+
+        self.lang_actions = {}
+        for code, name in SUPPORTED_TRANSLATE_LANGS.items():
+            act = QAction(name, self.target_lang_menu)
+            act.setCheckable(True)
+            act.setChecked(code == cur_target)
+            act.triggered.connect(lambda checked, c=code: self.set_target_translate_language(c))
+            self.target_lang_menu.addAction(act)
+            self.lang_actions[code] = act
+        self.menu.addMenu(self.target_lang_menu)
 
         # Anında Bilgi / Cevapla Kısayol Bilgisi / Tetikleyici
         self.knowledge_action = QAction("💡 Anında Bilgi / Cevapla (Alt+E)", self)
@@ -717,10 +1035,15 @@ class SystemTrayApp(QSystemTrayIcon):
         self.menu.addAction(self.exit_action)
 
     def show_settings_window(self):
-        """Düzeltme Stüdyosu ve Ayarlar Penceresini Aç."""
+        """Düzeltme Stüdyosu ve Ayarlar Penceresini Aç ve her koşulda en öne getir."""
         from src.main_window import MainWindow
         if self.main_window is None:
             self.main_window = MainWindow(tray_icon=self)
+
+        self.main_window.setWindowState(
+            (self.main_window.windowState() & ~Qt.WindowState.WindowMinimized)
+            | Qt.WindowState.WindowActive
+        )
         self.main_window.showNormal()
         self.main_window.show()
         self.main_window.raise_()
@@ -728,11 +1051,30 @@ class SystemTrayApp(QSystemTrayIcon):
         if sys.platform == "win32":
             try:
                 import ctypes
+                user32 = ctypes.windll.user32
+                kernel32 = ctypes.windll.kernel32
                 hwnd = int(self.main_window.winId())
-                ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.ShowWindow(hwnd, 5)  # SW_SHOW
+
+                fg_hwnd = user32.GetForegroundWindow()
+                fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
+                cur_tid = kernel32.GetCurrentThreadId()
+                attached = False
+                if fg_tid and cur_tid and fg_tid != cur_tid:
+                    attached = bool(user32.AttachThreadInput(fg_tid, cur_tid, True))
+
+                user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)  # HWND_TOPMOST
+                user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)  # HWND_NOTOPMOST
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+                user32.SetFocus(hwnd)
+
+                if attached:
+                    user32.AttachThreadInput(fg_tid, cur_tid, False)
             except Exception:
                 pass
+
 
     def show_personal_dictionary(self):
         """Kişisel sözlük dosyasını varsayılan editörde aç."""
@@ -816,6 +1158,10 @@ class SystemTrayApp(QSystemTrayIcon):
                 self._win32_hotkey_thread.stop()
             except Exception:
                 pass
+        try:
+            self.hide()
+        except Exception:
+            pass
         QApplication.quit()
 
     def on_tray_activated(self, reason):
@@ -835,13 +1181,35 @@ class SystemTrayApp(QSystemTrayIcon):
             mappings = [
                 (1001, hotkey_str, correct_selected_text),
                 (1002, "alt+w", translate_selected_text),
-                (1003, "alt+e", generate_knowledge_for_selected_text)
+                (1003, "alt+e", generate_knowledge_for_selected_text),
+                (1004, "alt+r", translate_selected_text_russian),
+                (1005, "alt+t", translate_selected_text_target_language),
             ]
             self._win32_hotkey_thread = Win32GlobalHotkeyThread(mappings)
             self._win32_hotkey_thread.start()
-            print(f"[+] Win32 Donanım Kısayolları Devrede: {hotkey_str} (Düzeltme), Alt+W (Çeviri), Alt+E (Bilgi)")
+            print(f"[+] Win32 Donanım Kısayolları Devrede: {hotkey_str} (Düzeltme), Alt+W (EN), Alt+R (RU), Alt+T (Hedef Dil), Alt+E (Bilgi)")
 
         self.current_hotkey = hotkey_str
+
+    def set_target_translate_language(self, lang_code: str):
+        self.settings = settings_manager.load_settings()
+        self.settings["target_translate_lang"] = lang_code
+        settings_manager.save_settings(self.settings)
+        from src.settings_manager import SUPPORTED_TRANSLATE_LANGS
+        lang_name = SUPPORTED_TRANSLATE_LANGS.get(lang_code, lang_code)
+        if hasattr(self, "lang_actions"):
+            for c, act in self.lang_actions.items():
+                act.setChecked(c == lang_code)
+        if hasattr(self, "target_lang_menu"):
+            self.target_lang_menu.setTitle(f"🌐 Hedef Çeviri (Alt+T: {lang_name})")
+        if hasattr(self, "target_quick_action"):
+            self.target_quick_action.setText(f"🚀 Şimdi Çevir ➜ {lang_name} (Alt+T)")
+        if getattr(self, "floating_pill", None):
+            self.floating_pill.update_target_lang(lang_code)
+        _notification_manager.show_notification(
+            "🌐 Hedef Dil Güncellendi",
+            f"Alt+T kısayolu artık {lang_name} diline çevirecek."
+        )
 
     def update_hotkey(self, new_hotkey: str):
         """Kısayol değiştirildiğinde güncelle."""
@@ -875,18 +1243,26 @@ def main():
     tray_icon = SystemTrayApp()
     tray_icon.show()
     tray_icon.show_settings_window()
+    QTimer.singleShot(300, tray_icon.show_settings_window)
 
-    # REST API üzerinden /show çağrıldığında Qt ana thread'inde pencereyi öne getir
+    # REST API üzerinden /show çağrıldığında Qt ana thread'ine güvenli sinyal (pyqtSignal) gönder
     try:
         from src.web import CorrectionApiHandler
-        from PyQt6.QtCore import QTimer
-        CorrectionApiHandler.show_window_callback = lambda: QTimer.singleShot(0, tray_icon.show_settings_window)
+        from PyQt6.QtCore import QObject, pyqtSignal
+
+        class _WindowShowBridge(QObject):
+            trigger = pyqtSignal()
+
+        _show_bridge = _WindowShowBridge()
+        _show_bridge.trigger.connect(tray_icon.show_settings_window)
+        tray_icon._show_bridge = _show_bridge
+        CorrectionApiHandler.show_window_callback = _show_bridge.trigger.emit
     except Exception:
         pass
 
     _notification_manager.show_notification(
         "🇹🇷 Türkçe Otomatik Düzeltici",
-        f"Çalışıyor! Düzeltme: {tray_icon.current_hotkey.upper()} | Çeviri: ALT+W | Bilgi: ALT+E"
+        f"Çalışıyor! Düzeltme: {tray_icon.current_hotkey.upper()} | EN: ALT+W | RU: ALT+R | Bilgi: ALT+E"
     )
 
     sys.exit(app.exec())

@@ -5,9 +5,11 @@ Tracks user corrections and learns new words based on acceptance patterns.
 import sqlite3
 import time
 import threading
+import re
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 import logging
+from src.turkish_case import turkish_lower
 
 logger = logging.getLogger(__name__)
 
@@ -124,11 +126,12 @@ class SelfLearningManager:
         for row_id, orig, corr in rows:
             conn.execute('UPDATE correction_events SET user_accepted = 1 WHERE id = ?', (row_id,))
             raw_tokens = re.findall(r"[a-zA-ZçÇğĞıİöÖşŞüÜ]+(?:['’][a-zA-ZçÇğĞıİöÖşŞüÜ]+)?", corr)
+            from src.dictionary import BLOCKED_SHORT_CHUNKS
             clean_words = []
             for t in raw_tokens:
                 stem = re.split(r"['’]", t)[0]
                 low = turkish_lower(stem)
-                if len(low) >= 3 and low not in {"den", "dan", "ten", "tan", "nin", "nın", "şuan"}:
+                if len(low) >= 3 and low not in BLOCKED_SHORT_CHUNKS and low not in {"den", "dan", "ten", "tan", "nin", "nın", "şuan"}:
                     clean_words.append(low)
                     conn.execute('''
                         INSERT OR REPLACE INTO word_learning (word, acceptance_count, rejection_count, last_updated)
@@ -188,12 +191,14 @@ class SelfLearningManager:
         with self._lock:
             conn = self._get_connection()
             try:
-                # Update the most recent correction event for this word
                 conn.execute('''
                     UPDATE correction_events
                     SET user_accepted = 1
-                    WHERE corrected_text = ? AND user_accepted IS NULL
-                    ORDER BY timestamp DESC LIMIT 1
+                    WHERE id = (
+                        SELECT id FROM correction_events
+                        WHERE corrected_text = ? AND user_accepted IS NULL
+                        ORDER BY timestamp DESC LIMIT 1
+                    )
                 ''', (word,))
 
                 # Update learning counters
@@ -310,6 +315,12 @@ class SelfLearningManager:
 
         if row:
             acceptance, rejection = row
+            from src.dictionary import BLOCKED_SHORT_CHUNKS
+            from src.slang import ALL_EXPANSIONS
+            low_w = turkish_lower(word.strip())
+            if low_w in BLOCKED_SHORT_CHUNKS or low_w in ALL_EXPANSIONS:
+                return
+
             # Promote if: acceptance >= 2 and acceptance >= 2 * rejection
             if acceptance >= 2 and acceptance >= 2 * rejection:
                 # Mark as learned
@@ -321,7 +332,7 @@ class SelfLearningManager:
 
                 logger.info(f"Word '{word}' promoted to personal dictionary via self-learning")
                 try:
-                    from src.dictionary import ALL_TURKISH_WORDS, BLOCKED_SHORT_CHUNKS, add_personal_word
+                    from src.dictionary import ALL_TURKISH_WORDS, add_personal_word
                     from src.slang import ALL_EXPANSIONS
                     low_w = turkish_lower(word.strip())
                     # Yalnızca ana sözlükte olmayan, TDK yazım hatası olmayan gerçek özel kelimeleri kisisel_sozluk.txt'e yaz

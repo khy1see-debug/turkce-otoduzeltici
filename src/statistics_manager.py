@@ -4,6 +4,7 @@ Logs corrections and computes usage statistics using SQLite.
 """
 import sqlite3
 import os
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -24,6 +25,7 @@ def get_db_path():
 class StatisticsManager:
     def __init__(self):
         self.db_path = get_db_path()
+        self._lock = threading.Lock()
         self.conn = None
         self.connect()
         self.create_tables()
@@ -39,21 +41,20 @@ class StatisticsManager:
 
     def create_tables(self):
         """Create the necessary tables if they don't exist."""
-        cursor = self.conn.cursor()
-        # Table for individual corrections
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS corrections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                original_text TEXT NOT NULL,
-                corrected_text TEXT NOT NULL
-            )
-        ''')
-        # Index on timestamp for faster queries if needed
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_timestamp ON corrections(timestamp)
-        ''')
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS corrections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    original_text TEXT NOT NULL,
+                    corrected_text TEXT NOT NULL
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_timestamp ON corrections(timestamp)
+            ''')
+            self.conn.commit()
 
     def record_correction(self, original_text, corrected_text):
         """
@@ -62,55 +63,55 @@ class StatisticsManager:
         :param corrected_text: The corrected text after applying fix_sentence.
         """
         if original_text == corrected_text:
-            # No actual correction, skip recording to save space
             return
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "INSERT INTO corrections (timestamp, original_text, corrected_text) VALUES (?, ?, ?)",
-            (datetime.now().isoformat(), original_text, corrected_text)
-        )
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO corrections (timestamp, original_text, corrected_text) VALUES (?, ?, ?)",
+                (datetime.now().isoformat(), original_text, corrected_text)
+            )
+            self.conn.commit()
 
     def get_total_corrections(self):
         """Return the total number of corrections recorded."""
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM corrections")
-        result = cursor.fetchone()
-        return result[0] if result else 0
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM corrections")
+            result = cursor.fetchone()
+            return result[0] if result else 0
 
     def get_top_corrections(self, limit=5):
         """
         Return the most frequent corrections as a list of tuples:
         (original_text, corrected_text, count)
         """
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT original_text, corrected_text, COUNT(*) as freq
-            FROM corrections
-            WHERE original_text != corrected_text
-            GROUP BY original_text, corrected_text
-            ORDER BY freq DESC
-            LIMIT ?
-        ''', (limit,))
-        return [(row['original_text'], row['corrected_text'], row['freq']) for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                SELECT original_text, corrected_text, COUNT(*) as freq
+                FROM corrections
+                WHERE original_text != corrected_text
+                GROUP BY original_text, corrected_text
+                ORDER BY freq DESC
+                LIMIT ?
+            ''', (limit,))
+            return [(row['original_text'], row['corrected_text'], row['freq']) for row in cursor.fetchall()]
 
     def get_time_saved_seconds(self):
         """
         Estimate time saved in seconds.
         Assumes average typing speed of 0.2 seconds per character (adjustable).
-        Time saved = sum(len(corrected) - len(original)) * 0.2 for each correction.
-        Note: This is a rough estimate; actual time saved depends on user's typing speed and the nature of errors.
         """
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT SUM(LENGTH(corrected_text) - LENGTH(original_text)) as total_diff
-            FROM corrections
-            WHERE original_text != corrected_text
-        ''')
-        result = cursor.fetchone()
-        total_diff = result[0] if result and result[0] is not None else 0
-        # Convert to seconds: assuming 0.2 seconds per character
-        return total_diff * 0.2
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                SELECT SUM(MAX(1, ABS(LENGTH(corrected_text) - LENGTH(original_text)) + 2)) as total_diff
+                FROM corrections
+                WHERE original_text != corrected_text
+            ''')
+            result = cursor.fetchone()
+            total_diff = result[0] if result and result[0] is not None else 0
+            return total_diff * 0.2
 
     def get_time_saved_formatted(self):
         """Return time saved as a formatted string (e.g., '2 saat 30 dakika')."""
@@ -128,11 +129,13 @@ class StatisticsManager:
 
     def clear_statistics(self):
         """Clear all correction records."""
-        cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM corrections")
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM corrections")
+            self.conn.commit()
 
     def close(self):
         """Close the database connection."""
-        if self.conn:
-            self.conn.close()
+        with self._lock:
+            if self.conn:
+                self.conn.close()

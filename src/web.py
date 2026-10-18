@@ -640,9 +640,19 @@ class CorrectionApiHandler(BaseHTTPRequestHandler):
             t0 = time.time()
             changes = []
             if mode == "ai":
-                from src.ai_engine import fix_with_ai
+                from src.ai_engine import NetworkError, PolicyError, fix_with_ai
                 api_key = payload.get("api_key")
-                ai_res = fix_with_ai(text, api_key=api_key)
+                try:
+                    ai_res = fix_with_ai(text, api_key=api_key)
+                except PolicyError as exc:
+                    self._send_json({"ok": False, "error": str(exc)}, 403)
+                    return
+                except NetworkError as exc:
+                    self._send_json(
+                        {"ok": False, "error": f"AI hizmetine bağlanılamadı: {exc}"},
+                        502,
+                    )
+                    return
                 if ai_res:
                     result = ai_res
                 else:
